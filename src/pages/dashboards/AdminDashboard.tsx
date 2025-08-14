@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
+import AddUserModal from '../../components/AddUserModal';
 import GoogleSheetsSync from '../../components/GoogleSheetsSync';
+import { useNotification } from '../../hooks/useNotification';
 import { 
   Users, 
   BookOpen, 
@@ -30,6 +32,7 @@ import {
 } from '../../data/mockData';
 
 function AdminOverview() {
+  const { showNotification } = useNotification();
   const users = getUsers();
   const programs = getPrograms();
   const sessions = getSessions();
@@ -108,7 +111,10 @@ function AdminOverview() {
         <div className="bg-white rounded-xl shadow-lg p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-text">Recent Users</h3>
-            <button className="flex items-center space-x-2 text-secondary hover:text-secondary/80 transition-colors">
+            <button 
+              onClick={() => showNotification('success', 'Add User feature - Navigate to Users Management')}
+              className="flex items-center space-x-2 text-secondary hover:text-secondary/80 transition-colors"
+            >
               <UserPlus className="h-5 w-5" />
               <span>Add User</span>
             </button>
@@ -141,7 +147,10 @@ function AdminOverview() {
         <div className="bg-white rounded-xl shadow-lg p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-text">Upcoming Programs</h3>
-            <button className="flex items-center space-x-2 text-secondary hover:text-secondary/80 transition-colors">
+            <button 
+              onClick={() => showNotification('success', 'Add Program feature - Navigate to Programs Management')}
+              className="flex items-center space-x-2 text-secondary hover:text-secondary/80 transition-colors"
+            >
               <PlusCircle className="h-5 w-5" />
               <span>Add Program</span>
             </button>
@@ -216,113 +225,150 @@ function AdminOverview() {
 
 function UsersManagement() {
   const [users, setUsers] = useState(getUsers());
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
+  const { showNotification } = useNotification();
 
   const handleDeleteUser = (id: string) => {
-    if (confirm('Are you sure you want to delete this user?')) {
-      deleteUser(id);
-      setUsers(getUsers());
+    if (window.confirm('Are you sure you want to delete this user?')) {
+      try {
+        console.log('[DELETE_USER] Deleting user:', id);
+        deleteUser(id);
+        setUsers(getUsers());
+        showNotification('success', 'User deleted successfully!');
+      } catch (error) {
+        console.error('[DELETE_USER] Error:', error);
+        showNotification('error', 'Failed to delete user. Please try again.');
+      }
     }
   };
 
-  const handleAddUser = (userData: any) => {
-    const newUser = {
-      ...userData,
-      id: Date.now().toString(),
-      created_at: new Date().toISOString()
-    };
-    addUser(newUser);
+  const handleUserAdded = () => {
     setUsers(getUsers());
-    setShowAddForm(false);
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-text">Users Management</h1>
-        <button
-          onClick={() => setShowAddForm(true)}
-          className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
-        >
-          <UserPlus className="h-5 w-5" />
-          <span>Add User</span>
-        </button>
-      </div>
+    <>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-text">Users Management</h1>
+          <button
+            onClick={() => {
+              console.log('[ADD_USER] Opening add user modal');
+              setShowAddModal(true);
+            }}
+            className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-all"
+          >
+            <UserPlus className="h-5 w-5" />
+            <span>Add User</span>
+          </button>
+        </div>
 
-      <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {users.map((user) => (
-                <tr key={user.id}>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="w-10 h-10 bg-secondary rounded-full flex items-center justify-center">
-                        <span className="text-white font-semibold text-sm">
-                          {user.name.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-text">{user.name}</div>
-                        <div className="text-sm text-text/60">{user.email}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      user.role === 'admin' ? 'bg-red-100 text-red-700' :
-                      user.role === 'trainer' ? 'bg-blue-100 text-blue-700' :
-                      'bg-green-100 text-green-700'
-                    }`}>
-                      {user.role}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-text/60">
-                    {new Date(user.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => setEditingUser(user)}
-                        className="text-secondary hover:text-secondary/80"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteUser(user.id)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {users.map((user) => (
+                  <tr key={user.id}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="w-10 h-10 bg-secondary rounded-full flex items-center justify-center">
+                          <span className="text-white font-semibold text-sm">
+                            {user.name.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-text">{user.name}</div>
+                          <div className="text-sm text-text/60">{user.email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        user.role === 'admin' ? 'bg-red-100 text-red-700' :
+                        user.role === 'trainer' ? 'bg-blue-100 text-blue-700' :
+                        'bg-green-100 text-green-700'
+                      }`}>
+                        {user.role}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-text/60">
+                      {new Date(user.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <div className="flex space-x-2">
+                        <button
+                          onClick={() => {
+                            console.log('[EDIT_USER] Editing user:', user.id);
+                            setEditingUser(user);
+                            showNotification('success', 'Edit user feature coming soon!');
+                          }}
+                          className="text-secondary hover:text-secondary/80 transition-colors"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteUser(user.id)}
+                          className="text-red-600 hover:text-red-800 transition-colors"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
+      
+      <AddUserModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onUserAdded={handleUserAdded}
+      />
+    </>
   );
 }
 
 function ProgramsManagement() {
   const [programs, setPrograms] = useState(getPrograms());
+  const { showNotification } = useNotification();
+
+  const handleDeleteProgram = (id: string) => {
+    if (window.confirm('Are you sure you want to delete this program?')) {
+      try {
+        console.log('[DELETE_PROGRAM] Deleting program:', id);
+        deleteProgram(id);
+        setPrograms(getPrograms());
+        showNotification('success', 'Program deleted successfully!');
+      } catch (error) {
+        console.error('[DELETE_PROGRAM] Error:', error);
+        showNotification('error', 'Failed to delete program. Please try again.');
+      }
+    }
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-text">Programs Management</h1>
-        <button className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2">
+        <button 
+          onClick={() => {
+            console.log('[ADD_PROGRAM] Add program clicked');
+            showNotification('success', 'Add Program feature coming soon!');
+          }}
+          className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-all"
+        >
           <PlusCircle className="h-5 w-5" />
           <span>Add Program</span>
         </button>
@@ -334,10 +380,19 @@ function ProgramsManagement() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-text">{program.title}</h3>
               <div className="flex space-x-2">
-                <button className="text-secondary hover:text-secondary/80">
+                <button 
+                  onClick={() => {
+                    console.log('[EDIT_PROGRAM] Editing program:', program.id);
+                    showNotification('success', 'Edit Program feature coming soon!');
+                  }}
+                  className="text-secondary hover:text-secondary/80 transition-colors"
+                >
                   <Edit className="h-5 w-5" />
                 </button>
-                <button className="text-red-600 hover:text-red-800">
+                <button 
+                  onClick={() => handleDeleteProgram(program.id)}
+                  className="text-red-600 hover:text-red-800 transition-colors"
+                >
                   <Trash2 className="h-5 w-5" />
                 </button>
               </div>
@@ -442,6 +497,39 @@ function AttendanceOverview() {
 }
 
 function SystemSettings() {
+  const { showNotification } = useNotification();
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [apiEndpoint, setApiEndpoint] = useState('https://script.google.com/macros/s/AKfycbx_jYcPeua9Gf7oo5qRgo1iFFxSfAv_6x2ld-21WFLksbMVhWKyHGZirp9bskHQPU4Oow/exec');
+
+  const handleTestConnection = async () => {
+    setIsTestingConnection(true);
+    console.log('[TEST_CONNECTION] Testing Google Sheets connection to:', apiEndpoint);
+    
+    try {
+      const response = await fetch(apiEndpoint, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('[TEST_CONNECTION] Response status:', response.status);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('[TEST_CONNECTION] Response data:', data);
+        showNotification('success', 'Google Sheets connection successful!');
+      } else {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error('[TEST_CONNECTION] Connection failed:', error);
+      showNotification('error', `Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-text">System Settings</h1>
@@ -476,12 +564,18 @@ function SystemSettings() {
               <label className="block text-sm font-medium text-text mb-2">API Endpoint</label>
               <input
                 type="url"
-                defaultValue="https://script.google.com/macros/s/AKfycbx_jYcPeua9Gf7oo5qRgo1iFFxSfAv_6x2ld-21WFLksbMVhWKyHGZirp9bskHQPU4Oow/exec"
+                value={apiEndpoint}
+                onChange={(e) => setApiEndpoint(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
+                placeholder="Enter Google Apps Script URL"
               />
             </div>
-            <button className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg">
-              Test Connection
+            <button 
+              onClick={handleTestConnection}
+              disabled={isTestingConnection || !apiEndpoint.trim()}
+              className="bg-secondary hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-all"
+            >
+              {isTestingConnection ? 'Testing...' : 'Test Connection'}
             </button>
           </div>
         </div>
