@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
+import { useNotification } from '../../hooks/useNotification';
 import { 
   BookOpen, 
   Calendar, 
@@ -31,6 +32,7 @@ import { saveAttendanceRecord, saveAssignmentSubmission } from '../../utils/goog
 
 function ParticipantOverview() {
   const { user } = useAuth();
+  const { showNotification } = useNotification();
   
   const allPrograms = getPrograms();
   const enrollments = getEnrollments().filter(e => e.participant_id === user?.id);
@@ -219,7 +221,13 @@ function ParticipantOverview() {
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl shadow-lg p-6 text-center hover:shadow-xl transition-shadow cursor-pointer">
+        <div 
+          onClick={() => {
+            console.log('[QUICK_ACTION] Mark Attendance clicked');
+            showNotification('success', 'Navigate to Attendance section to mark attendance');
+          }}
+          className="bg-white rounded-xl shadow-lg p-6 text-center hover:shadow-xl transition-shadow cursor-pointer"
+        >
           <div className="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center mx-auto mb-4">
             <Calendar className="h-6 w-6 text-white" />
           </div>
@@ -227,7 +235,13 @@ function ParticipantOverview() {
           <p className="text-text/60 text-sm">Check in to sessions</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-lg p-6 text-center hover:shadow-xl transition-shadow cursor-pointer">
+        <div 
+          onClick={() => {
+            console.log('[QUICK_ACTION] Assignments clicked');
+            showNotification('success', 'Navigate to Assignments section');
+          }}
+          className="bg-white rounded-xl shadow-lg p-6 text-center hover:shadow-xl transition-shadow cursor-pointer"
+        >
           <div className="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center mx-auto mb-4">
             <FileText className="h-6 w-6 text-white" />
           </div>
@@ -235,7 +249,13 @@ function ParticipantOverview() {
           <p className="text-text/60 text-sm">View and submit work</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-lg p-6 text-center hover:shadow-xl transition-shadow cursor-pointer">
+        <div 
+          onClick={() => {
+            console.log('[QUICK_ACTION] Progress Report clicked');
+            showNotification('success', 'Navigate to Progress section');
+          }}
+          className="bg-white rounded-xl shadow-lg p-6 text-center hover:shadow-xl transition-shadow cursor-pointer"
+        >
           <div className="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center mx-auto mb-4">
             <BarChart3 className="h-6 w-6 text-white" />
           </div>
@@ -243,7 +263,13 @@ function ParticipantOverview() {
           <p className="text-text/60 text-sm">Track your learning</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-lg p-6 text-center hover:shadow-xl transition-shadow cursor-pointer">
+        <div 
+          onClick={() => {
+            console.log('[QUICK_ACTION] Achievements clicked');
+            showNotification('success', 'Achievements feature coming soon!');
+          }}
+          className="bg-white rounded-xl shadow-lg p-6 text-center hover:shadow-xl transition-shadow cursor-pointer"
+        >
           <div className="w-12 h-12 bg-orange-500 rounded-lg flex items-center justify-center mx-auto mb-4">
             <Award className="h-6 w-6 text-white" />
           </div>
@@ -258,6 +284,7 @@ function ParticipantOverview() {
 function MyTrainings() {
   const { user } = useAuth();
   const [availablePrograms, setAvailablePrograms] = useState(getPrograms());
+  const { showNotification } = useNotification();
   const enrollments = getEnrollments().filter(e => e.participant_id === user?.id);
   const enrolledPrograms = availablePrograms.filter(p => 
     enrollments.some(e => e.training_id === p.id)
@@ -268,16 +295,22 @@ function MyTrainings() {
 
   const handleEnroll = (programId: string) => {
     if (user) {
-      const enrollment = {
-        id: Date.now().toString(),
-        participant_id: user.id,
-        training_id: programId,
-        enrolled_at: new Date().toISOString(),
-        status: 'active' as const
-      };
-      addEnrollment(enrollment);
-      // Refresh data
-      setAvailablePrograms(getPrograms());
+      try {
+        console.log('[ENROLL_PROGRAM] Enrolling user in program:', programId);
+        const enrollment = {
+          id: Date.now().toString(),
+          participant_id: user.id,
+          training_id: programId,
+          enrolled_at: new Date().toISOString(),
+          status: 'active' as const
+        };
+        addEnrollment(enrollment);
+        setAvailablePrograms(getPrograms());
+        showNotification('success', 'Successfully enrolled in the program!');
+      } catch (error) {
+        console.error('[ENROLL_PROGRAM] Error:', error);
+        showNotification('error', 'Failed to enroll in program. Please try again.');
+      }
     }
   };
 
@@ -369,6 +402,7 @@ function MyTrainings() {
 
 function MyAssignments() {
   const { user } = useAuth();
+  const { showNotification } = useNotification();
   const enrollments = getEnrollments().filter(e => e.participant_id === user?.id);
   const assignments = getAssignments().filter(a => 
     enrollments.some(e => e.training_id === a.training_id)
@@ -379,30 +413,36 @@ function MyAssignments() {
 
   const handleSubmitAssignment = async () => {
     if (user && selectedAssignment && submissionContent.trim()) {
-      const assignment = assignments.find(a => a.id === selectedAssignment);
-      if (assignment) {
-        const submission = {
-          id: Date.now().toString(),
-          assignment_id: selectedAssignment,
-          participant_id: user.id,
-          content: submissionContent,
-          submitted_at: new Date().toISOString()
-        };
+      try {
+        console.log('[SUBMIT_ASSIGNMENT] Submitting assignment:', selectedAssignment);
+        const assignment = assignments.find(a => a.id === selectedAssignment);
+        if (assignment) {
+          const submission = {
+            id: Date.now().toString(),
+            assignment_id: selectedAssignment,
+            participant_id: user.id,
+            content: submissionContent,
+            submitted_at: new Date().toISOString()
+          };
 
-        addAssignmentSubmission(submission);
-        
-        // Save to Google Sheets
-        await saveAssignmentSubmission({
-          assignmentId: selectedAssignment,
-          participantId: user.id,
-          participantName: user.name,
-          content: submissionContent,
-          submittedAt: submission.submitted_at
-        });
+          addAssignmentSubmission(submission);
+          
+          // Save to Google Sheets
+          await saveAssignmentSubmission({
+            assignmentId: selectedAssignment,
+            participantId: user.id,
+            participantName: user.name,
+            content: submissionContent,
+            submittedAt: submission.submitted_at
+          });
 
-        setSubmissionContent('');
-        setSelectedAssignment('');
-        alert('Assignment submitted successfully!');
+          setSubmissionContent('');
+          setSelectedAssignment('');
+          showNotification('success', 'Assignment submitted successfully!');
+        }
+      } catch (error) {
+        console.error('[SUBMIT_ASSIGNMENT] Error:', error);
+        showNotification('error', 'Failed to submit assignment. Please try again.');
       }
     }
   };
@@ -505,6 +545,7 @@ function MyAssignments() {
 
 function MyAttendance() {
   const { user } = useAuth();
+  const { showNotification } = useNotification();
   const [selectedSession, setSelectedSession] = useState('');
   const enrollments = getEnrollments().filter(e => e.participant_id === user?.id);
   const enrolledPrograms = getPrograms().filter(p => 
@@ -517,29 +558,62 @@ function MyAttendance() {
 
   const handleMarkAttendance = async (sessionId: string) => {
     if (user) {
-      const session = availableSessions.find(s => s.id === sessionId);
-      if (session) {
-        const attendanceRecord = {
-          id: Date.now().toString(),
-          session_id: sessionId,
-          participant_id: user.id,
-          status: 'present' as const,
-          timestamp: new Date().toISOString()
-        };
-
-        addAttendance(attendanceRecord);
+      try {
+        console.log('[MARK_ATTENDANCE] Marking attendance for session:', sessionId);
         
-        // Save to Google Sheets
-        await saveAttendanceRecord({
-          sessionId,
-          participantId: user.id,
-          participantName: user.name,
-          status: 'present',
-          timestamp: attendanceRecord.timestamp,
-          sessionTitle: session.title
-        });
+        // Check if already marked attendance
+        const existingAttendance = attendance.find(a => a.session_id === sessionId);
+        if (existingAttendance) {
+          showNotification('error', 'You have already marked attendance for this session!');
+          return;
+        }
+        
+        const session = availableSessions.find(s => s.id === sessionId);
+        if (session) {
+          // Validate time - only allow attendance during session time
+          const sessionDate = new Date(session.date);
+          const today = new Date();
+          const isToday = sessionDate.toDateString() === today.toDateString();
+          
+          if (!isToday) {
+            showNotification('error', 'You can only mark attendance on the session date!');
+            return;
+          }
+          
+          const currentHour = today.getHours();
+          const isValidTime = (session.time_slot === 'AM' && currentHour >= 8 && currentHour < 12) ||
+                             (session.time_slot === 'PM' && currentHour >= 13 && currentHour < 17);
+          
+          if (!isValidTime) {
+            showNotification('error', `You can only mark attendance during the session time (${session.time_slot === 'AM' ? '08:00-12:00' : '13:00-17:00'})!`);
+            return;
+          }
 
-        alert('Attendance marked successfully!');
+          const attendanceRecord = {
+            id: Date.now().toString(),
+            session_id: sessionId,
+            participant_id: user.id,
+            status: 'present' as const,
+            timestamp: new Date().toISOString()
+          };
+
+          addAttendance(attendanceRecord);
+          
+          // Save to Google Sheets
+          await saveAttendanceRecord({
+            sessionId,
+            participantId: user.id,
+            participantName: user.name,
+            status: 'present',
+            timestamp: attendanceRecord.timestamp,
+            sessionTitle: session.title
+          });
+
+          showNotification('success', 'Attendance marked successfully!');
+        }
+      } catch (error) {
+        console.error('[MARK_ATTENDANCE] Error:', error);
+        showNotification('error', 'Failed to mark attendance. Please try again.');
       }
     }
   };
@@ -580,7 +654,7 @@ function MyAttendance() {
                       ) : (
                         <button
                           onClick={() => handleMarkAttendance(session.id)}
-                          className="bg-secondary hover:bg-secondary/90 text-white px-3 py-1 rounded-full text-xs font-medium"
+                          className="bg-secondary hover:bg-secondary/90 text-white px-3 py-1 rounded-full text-xs font-medium transition-all"
                         >
                           Mark Attendance
                         </button>
