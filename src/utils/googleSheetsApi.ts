@@ -36,6 +36,7 @@ export interface AssignmentSubmission {
 // Fetch data from Google Sheets
 export async function fetchGoogleSheetsData(): Promise<GoogleSheetsResponse> {
   try {
+    console.log('[GOOGLE_SHEETS] Fetching data from:', GOOGLE_SHEETS_API_URL);
     const response = await fetch(GOOGLE_SHEETS_API_URL);
     
     if (!response.ok) {
@@ -62,6 +63,7 @@ export async function fetchGoogleSheetsData(): Promise<GoogleSheetsResponse> {
 // Save user registration to Google Sheets
 export async function saveUserRegistration(userData: UserRegistration): Promise<boolean> {
   try {
+    console.log('[GOOGLE_SHEETS] Saving user registration:', userData.email);
     const response = await fetch(GOOGLE_SHEETS_API_URL, {
       method: 'POST',
       headers: {
@@ -84,6 +86,7 @@ export async function saveUserRegistration(userData: UserRegistration): Promise<
 // Save attendance record to Google Sheets
 export async function saveAttendanceRecord(attendance: AttendanceRecord): Promise<boolean> {
   try {
+    console.log('[GOOGLE_SHEETS] Saving attendance record:', attendance);
     const response = await fetch(GOOGLE_SHEETS_API_URL, {
       method: 'POST',
       headers: {
@@ -106,6 +109,7 @@ export async function saveAttendanceRecord(attendance: AttendanceRecord): Promis
 // Save assignment submission to Google Sheets
 export async function saveAssignmentSubmission(submission: AssignmentSubmission): Promise<boolean> {
   try {
+    console.log('[GOOGLE_SHEETS] Saving assignment submission:', submission);
     const response = await fetch(GOOGLE_SHEETS_API_URL, {
       method: 'POST',
       headers: {
@@ -128,6 +132,7 @@ export async function saveAssignmentSubmission(submission: AssignmentSubmission)
 // Export participants list for a session
 export async function exportParticipantsList(sessionId: string): Promise<Blob | null> {
   try {
+    console.log('[GOOGLE_SHEETS] Exporting participants list for session:', sessionId);
     const response = await fetch(`${GOOGLE_SHEETS_API_URL}?action=exportParticipants&sessionId=${sessionId}`);
     
     if (!response.ok) {
@@ -142,6 +147,7 @@ export async function exportParticipantsList(sessionId: string): Promise<Blob | 
 }
 
 export async function syncWithGoogleSheets(): Promise<void> {
+  console.log('[GOOGLE_SHEETS] Starting sync with Google Sheets');
   const result = await fetchGoogleSheetsData();
   
   if (result.success) {
