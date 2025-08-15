@@ -2,8 +2,11 @@ import React, { useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
 import AddUserModal from '../../components/AddUserModal';
+import AddProgramModal from '../../components/AddProgramModal';
 import GoogleSheetsSync from '../../components/GoogleSheetsSync';
+import LoadingSpinner from '../../components/LoadingSpinner';
 import { useNotification } from '../../hooks/useNotification';
+import { testGoogleSheetsConnection } from '../../utils/googleSheetsApi';
 import { 
   Users, 
   BookOpen, 
@@ -342,6 +345,7 @@ function UsersManagement() {
 
 function ProgramsManagement() {
   const [programs, setPrograms] = useState(getPrograms());
+  const [showAddModal, setShowAddModal] = useState(false);
   const { showNotification } = useNotification();
 
   const handleDeleteProgram = (id: string) => {
@@ -358,74 +362,83 @@ function ProgramsManagement() {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-text">Programs Management</h1>
-        <button 
-          onClick={() => {
-            console.log('[ADD_PROGRAM] Add program clicked');
-            showNotification('success', 'Add Program feature coming soon!');
-          }}
-          className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-all"
-        >
-          <PlusCircle className="h-5 w-5" />
-          <span>Add Program</span>
-        </button>
-      </div>
+  const handleProgramAdded = () => {
+    setPrograms(getPrograms());
+  };
 
-      <div className="grid gap-6">
-        {programs.map((program) => (
-          <div key={program.id} className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-text">{program.title}</h3>
-              <div className="flex space-x-2">
-                <button 
-                  onClick={() => {
-                    console.log('[EDIT_PROGRAM] Editing program:', program.id);
-                    showNotification('success', 'Edit Program feature coming soon!');
-                  }}
-                  className="text-secondary hover:text-secondary/80 transition-colors"
-                >
-                  <Edit className="h-5 w-5" />
-                </button>
-                <button 
-                  onClick={() => handleDeleteProgram(program.id)}
-                  className="text-red-600 hover:text-red-800 transition-colors"
-                >
-                  <Trash2 className="h-5 w-5" />
-                </button>
+  return (
+    <>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-text">Programs Management</h1>
+          <button 
+            onClick={() => setShowAddModal(true)}
+            className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-all"
+          >
+            <PlusCircle className="h-5 w-5" />
+            <span>Add Program</span>
+          </button>
+        </div>
+
+        <div className="grid gap-6">
+          {programs.map((program) => (
+            <div key={program.id} className="bg-white rounded-xl shadow-lg p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-text">{program.title}</h3>
+                <div className="flex space-x-2">
+                  <button 
+                    onClick={() => {
+                      console.log('[EDIT_PROGRAM] Editing program:', program.id);
+                      showNotification('success', 'Edit Program feature coming soon!');
+                    }}
+                    className="text-secondary hover:text-secondary/80 transition-colors"
+                  >
+                    <Edit className="h-5 w-5" />
+                  </button>
+                  <button 
+                    onClick={() => handleDeleteProgram(program.id)}
+                    className="text-red-600 hover:text-red-800 transition-colors"
+                  >
+                    <Trash2 className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+              <p className="text-text/70 mb-4">{program.description}</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <span className="text-text/60">Department:</span>
+                  <p className="font-medium">{program.department}</p>
+                </div>
+                <div>
+                  <span className="text-text/60">Duration:</span>
+                  <p className="font-medium">{new Date(program.start_date).toLocaleDateString()} - {new Date(program.end_date).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <span className="text-text/60">Participants:</span>
+                  <p className="font-medium">{program.current_participants}/{program.max_participants}</p>
+                </div>
+                <div>
+                  <span className="text-text/60">Status:</span>
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    program.status === 'upcoming' ? 'bg-blue-100 text-blue-700' :
+                    program.status === 'ongoing' ? 'bg-green-100 text-green-700' :
+                    'bg-gray-100 text-gray-700'
+                  }`}>
+                    {program.status}
+                  </span>
+                </div>
               </div>
             </div>
-            <p className="text-text/70 mb-4">{program.description}</p>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div>
-                <span className="text-text/60">Department:</span>
-                <p className="font-medium">{program.department}</p>
-              </div>
-              <div>
-                <span className="text-text/60">Duration:</span>
-                <p className="font-medium">{new Date(program.start_date).toLocaleDateString()} - {new Date(program.end_date).toLocaleDateString()}</p>
-              </div>
-              <div>
-                <span className="text-text/60">Participants:</span>
-                <p className="font-medium">{program.current_participants}/{program.max_participants}</p>
-              </div>
-              <div>
-                <span className="text-text/60">Status:</span>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  program.status === 'upcoming' ? 'bg-blue-100 text-blue-700' :
-                  program.status === 'ongoing' ? 'bg-green-100 text-green-700' :
-                  'bg-gray-100 text-gray-700'
-                }`}>
-                  {program.status}
-                </span>
-              </div>
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
-    </div>
+      
+      <AddProgramModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onProgramAdded={handleProgramAdded}
+      />
+    </>
   );
 }
 
@@ -499,6 +512,7 @@ function AttendanceOverview() {
 function SystemSettings() {
   const { showNotification } = useNotification();
   const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [apiEndpoint, setApiEndpoint] = useState('https://script.google.com/macros/s/AKfycbx_jYcPeua9Gf7oo5qRgo1iFFxSfAv_6x2ld-21WFLksbMVhWKyHGZirp9bskHQPU4Oow/exec');
 
   const handleTestConnection = async () => {
@@ -506,25 +520,20 @@ function SystemSettings() {
     console.log('[TEST_CONNECTION] Testing Google Sheets connection to:', apiEndpoint);
     
     try {
-      const response = await fetch(apiEndpoint, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      console.log('[TEST_CONNECTION] Response status:', response.status);
+      const result = await testGoogleSheetsConnection(apiEndpoint);
       
-      if (response.ok) {
-        const data = await response.json();
-        console.log('[TEST_CONNECTION] Response data:', data);
-        showNotification('success', 'Google Sheets connection successful!');
+      setTestResult(result);
+      
+      if (result.success) {
+        showNotification('success', result.message || 'Google Sheets connection successful!');
       } else {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        showNotification('error', result.error || 'Connection failed');
       }
     } catch (error) {
       console.error('[TEST_CONNECTION] Connection failed:', error);
-      showNotification('error', `Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setTestResult({ success: false, message: errorMessage });
+      showNotification('error', `Connection failed: ${errorMessage}`);
     } finally {
       setIsTestingConnection(false);
     }
@@ -573,10 +582,39 @@ function SystemSettings() {
             <button 
               onClick={handleTestConnection}
               disabled={isTestingConnection || !apiEndpoint.trim()}
-              className="bg-secondary hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-all"
+              className="bg-secondary hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-all flex items-center space-x-2"
             >
-              {isTestingConnection ? 'Testing...' : 'Test Connection'}
+              {isTestingConnection ? (
+                <LoadingSpinner size="sm" text="Testing..." />
+              ) : (
+                'Test Connection'
+              )}
             </button>
+            
+            {/* Test Result */}
+            {testResult && (
+              <div className={`mt-4 p-4 rounded-lg ${
+                testResult.success 
+                  ? 'bg-green-50 border border-green-200 text-green-800' 
+                  : 'bg-red-50 border border-red-200 text-red-800'
+              }`}>
+                <div className="flex items-center space-x-2">
+                  {testResult.success ? (
+                    <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs">✓</span>
+                    </div>
+                  ) : (
+                    <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs">✗</span>
+                    </div>
+                  )}
+                  <span className="font-medium">
+                    {testResult.success ? 'Connection Successful' : 'Connection Failed'}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm">{testResult.message}</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
