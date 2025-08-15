@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
+import LoadingSpinner from '../../components/LoadingSpinner';
 import { useNotification } from '../../hooks/useNotification';
 import { 
   BookOpen, 
@@ -403,6 +404,7 @@ function MyTrainings() {
 function MyAssignments() {
   const { user } = useAuth();
   const { showNotification } = useNotification();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const enrollments = getEnrollments().filter(e => e.participant_id === user?.id);
   const assignments = getAssignments().filter(a => 
     enrollments.some(e => e.training_id === a.training_id)
@@ -412,6 +414,9 @@ function MyAssignments() {
   const [submissionContent, setSubmissionContent] = useState('');
 
   const handleSubmitAssignment = async () => {
+    if (isSubmitting) return;
+    
+    setIsSubmitting(true);
     if (user && selectedAssignment && submissionContent.trim()) {
       try {
         console.log('[SUBMIT_ASSIGNMENT] Submitting assignment:', selectedAssignment);
@@ -444,6 +449,8 @@ function MyAssignments() {
         console.error('[SUBMIT_ASSIGNMENT] Error:', error);
         showNotification('error', 'Failed to submit assignment. Please try again.');
       }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -522,15 +529,17 @@ function MyAssignments() {
             <div className="flex space-x-4">
               <button
                 onClick={handleSubmitAssignment}
+                disabled={isSubmitting || !submissionContent.trim()}
                 className="bg-secondary hover:bg-secondary/90 text-white px-6 py-2 rounded-lg"
               >
-                Submit Assignment
+                {isSubmitting ? <LoadingSpinner size="sm" text="Submitting..." /> : 'Submit Assignment'}
               </button>
               <button
                 onClick={() => {
                   setSelectedAssignment('');
                   setSubmissionContent('');
                 }}
+                disabled={isSubmitting}
                 className="bg-gray-300 hover:bg-gray-400 text-gray-700 px-6 py-2 rounded-lg"
               >
                 Cancel
@@ -546,6 +555,7 @@ function MyAssignments() {
 function MyAttendance() {
   const { user } = useAuth();
   const { showNotification } = useNotification();
+  const [isMarkingAttendance, setIsMarkingAttendance] = useState(false);
   const [selectedSession, setSelectedSession] = useState('');
   const enrollments = getEnrollments().filter(e => e.participant_id === user?.id);
   const enrolledPrograms = getPrograms().filter(p => 
@@ -557,6 +567,9 @@ function MyAttendance() {
   const attendance = getAttendance().filter(a => a.participant_id === user?.id);
 
   const handleMarkAttendance = async (sessionId: string) => {
+    if (isMarkingAttendance) return;
+    
+    setIsMarkingAttendance(true);
     if (user) {
       try {
         console.log('[MARK_ATTENDANCE] Marking attendance for session:', sessionId);
@@ -615,6 +628,8 @@ function MyAttendance() {
         console.error('[MARK_ATTENDANCE] Error:', error);
         showNotification('error', 'Failed to mark attendance. Please try again.');
       }
+    } finally {
+      setIsMarkingAttendance(false);
     }
   };
 
@@ -654,9 +669,10 @@ function MyAttendance() {
                       ) : (
                         <button
                           onClick={() => handleMarkAttendance(session.id)}
+                          disabled={isMarkingAttendance}
                           className="bg-secondary hover:bg-secondary/90 text-white px-3 py-1 rounded-full text-xs font-medium transition-all"
                         >
-                          Mark Attendance
+                          {isMarkingAttendance ? <LoadingSpinner size="sm" /> : 'Mark Attendance'}
                         </button>
                       )}
                     </div>

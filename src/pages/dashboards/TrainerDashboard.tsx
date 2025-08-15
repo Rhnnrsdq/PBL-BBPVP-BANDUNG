@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
+import AddSessionModal from '../../components/AddSessionModal';
+import AddAssignmentModal from '../../components/AddAssignmentModal';
+import LoadingSpinner from '../../components/LoadingSpinner';
 import { useNotification } from '../../hooks/useNotification';
 import { 
   Calendar, 
@@ -228,6 +231,7 @@ function TrainerOverview() {
 function SessionsManagement() {
   const { user } = useAuth();
   const [sessions, setSessions] = useState(getSessions().filter(s => s.trainer_id === user?.id));
+  const [showAddModal, setShowAddModal] = useState(false);
   const { showNotification } = useNotification();
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingSession, setEditingSession] = useState<any>(null);
@@ -242,6 +246,10 @@ function SessionsManagement() {
     addSession(newSession);
     setSessions(getSessions().filter(s => s.trainer_id === user?.id));
     setShowAddForm(false);
+  };
+
+  const handleSessionAdded = () => {
+    setSessions(getSessions().filter(s => s.trainer_id === user?.id));
   };
 
   const handleDeleteSession = (id: string) => {
@@ -279,89 +287,94 @@ function SessionsManagement() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-text">Sessions Management</h1>
-        <button
-          onClick={() => {
-            console.log('[ADD_SESSION] Add session clicked');
-            setShowAddForm(true);
-            showNotification('success', 'Add Session feature coming soon!');
-          }}
-          className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-all"
-        >
-          <Plus className="h-5 w-5" />
-          <span>Add Session</span>
-        </button>
-      </div>
+    <>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-text">Sessions Management</h1>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-all"
+          >
+            <Plus className="h-5 w-5" />
+            <span>Add Session</span>
+          </button>
+        </div>
 
-      <div className="grid gap-6">
-        {sessions.map((session) => {
-          const program = programs.find(p => p.id === session.training_id);
-          return (
-            <div key={session.id} className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-xl font-bold text-text">{session.title}</h3>
-                  <p className="text-text/60">{program?.title}</p>
+        <div className="grid gap-6">
+          {sessions.map((session) => {
+            const program = programs.find(p => p.id === session.training_id);
+            return (
+              <div key={session.id} className="bg-white rounded-xl shadow-lg p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-text">{session.title}</h3>
+                    <p className="text-text/60">{program?.title}</p>
+                  </div>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => handleExportParticipants(session.id)}
+                      className="text-green-600 hover:text-green-800 transition-colors"
+                    >
+                      <Download className="h-5 w-5" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        console.log('[EDIT_SESSION] Editing session:', session.id);
+                        setEditingSession(session);
+                        showNotification('success', 'Edit Session feature coming soon!');
+                      }}
+                      className="text-secondary hover:text-secondary/80 transition-colors"
+                    >
+                      <Edit className="h-5 w-5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSession(session.id)}
+                      className="text-red-600 hover:text-red-800 transition-colors"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => handleExportParticipants(session.id)}
-                    className="text-green-600 hover:text-green-800 transition-colors"
-                  >
-                    <Download className="h-5 w-5" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      console.log('[EDIT_SESSION] Editing session:', session.id);
-                      setEditingSession(session);
-                      showNotification('success', 'Edit Session feature coming soon!');
-                    }}
-                    className="text-secondary hover:text-secondary/80 transition-colors"
-                  >
-                    <Edit className="h-5 w-5" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteSession(session.id)}
-                    className="text-red-600 hover:text-red-800 transition-colors"
-                  >
-                    <Trash2 className="h-5 w-5" />
-                  </button>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <span className="text-text/60">Date:</span>
+                    <p className="font-medium">{new Date(session.date).toLocaleDateString()}</p>
+                  </div>
+                  <div>
+                    <span className="text-text/60">Time:</span>
+                    <p className="font-medium">{session.time_slot === 'AM' ? '08:00 - 12:00' : '13:00 - 17:00'}</p>
+                  </div>
+                  <div>
+                    <span className="text-text/60">Location:</span>
+                    <p className="font-medium">{session.location || 'TBA'}</p>
+                  </div>
+                  <div>
+                    <span className="text-text/60">Participants:</span>
+                    <p className="font-medium">{program?.current_participants || 0}</p>
+                  </div>
                 </div>
+                {session.description && (
+                  <p className="text-text/70 mt-4">{session.description}</p>
+                )}
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div>
-                  <span className="text-text/60">Date:</span>
-                  <p className="font-medium">{new Date(session.date).toLocaleDateString()}</p>
-                </div>
-                <div>
-                  <span className="text-text/60">Time:</span>
-                  <p className="font-medium">{session.time_slot === 'AM' ? '08:00 - 12:00' : '13:00 - 17:00'}</p>
-                </div>
-                <div>
-                  <span className="text-text/60">Location:</span>
-                  <p className="font-medium">{session.location || 'TBA'}</p>
-                </div>
-                <div>
-                  <span className="text-text/60">Participants:</span>
-                  <p className="font-medium">{program?.current_participants || 0}</p>
-                </div>
-              </div>
-              {session.description && (
-                <p className="text-text/70 mt-4">{session.description}</p>
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
-    </div>
+      
+      <AddSessionModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSessionAdded={handleSessionAdded}
+      />
+    </>
   );
 }
 
 function AssignmentsManagement() {
   const { user } = useAuth();
   const [assignments, setAssignments] = useState(getAssignments());
+  const [showAddModal, setShowAddModal] = useState(false);
   const { showNotification } = useNotification();
   const [submissions, setSubmissions] = useState(getAssignmentSubmissions());
   const [showAddForm, setShowAddForm] = useState(false);
@@ -383,6 +396,10 @@ function AssignmentsManagement() {
     setShowAddForm(false);
   };
 
+  const handleAssignmentAdded = () => {
+    setAssignments(getAssignments());
+  };
+
   const handleDeleteAssignment = (id: string) => {
     if (window.confirm('Are you sure you want to delete this assignment?')) {
       try {
@@ -398,81 +415,85 @@ function AssignmentsManagement() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-text">Assignments Management</h1>
-        <button
-          onClick={() => {
-            console.log('[ADD_ASSIGNMENT] Add assignment clicked');
-            setShowAddForm(true);
-            showNotification('success', 'Add Assignment feature coming soon!');
-          }}
-          className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-all"
-        >
-          <Plus className="h-5 w-5" />
-          <span>Add Assignment</span>
-        </button>
-      </div>
+    <>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-text">Assignments Management</h1>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-all"
+          >
+            <Plus className="h-5 w-5" />
+            <span>Add Assignment</span>
+          </button>
+        </div>
 
-      <div className="grid gap-6">
-        {trainerAssignments.map((assignment) => {
-          const program = programs.find(p => p.id === assignment.training_id);
-          const assignmentSubmissions = submissions.filter(s => s.assignment_id === assignment.id);
-          
-          return (
-            <div key={assignment.id} className="bg-white rounded-xl shadow-lg p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-xl font-bold text-text">{assignment.title}</h3>
-                  <p className="text-text/60">{program?.title}</p>
+        <div className="grid gap-6">
+          {trainerAssignments.map((assignment) => {
+            const program = programs.find(p => p.id === assignment.training_id);
+            const assignmentSubmissions = submissions.filter(s => s.assignment_id === assignment.id);
+            
+            return (
+              <div key={assignment.id} className="bg-white rounded-xl shadow-lg p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-text">{assignment.title}</h3>
+                    <p className="text-text/60">{program?.title}</p>
+                  </div>
+                  <div className="flex space-x-2">
+                    <button 
+                      onClick={() => {
+                        console.log('[EDIT_ASSIGNMENT] Editing assignment:', assignment.id);
+                        showNotification('success', 'Edit Assignment feature coming soon!');
+                      }}
+                      className="text-secondary hover:text-secondary/80 transition-colors"
+                    >
+                      <Edit className="h-5 w-5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteAssignment(assignment.id)}
+                      className="text-red-600 hover:text-red-800 transition-colors"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex space-x-2">
-                  <button 
-                    onClick={() => {
-                      console.log('[EDIT_ASSIGNMENT] Editing assignment:', assignment.id);
-                      showNotification('success', 'Edit Assignment feature coming soon!');
-                    }}
-                    className="text-secondary hover:text-secondary/80 transition-colors"
-                  >
-                    <Edit className="h-5 w-5" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteAssignment(assignment.id)}
-                    className="text-red-600 hover:text-red-800 transition-colors"
-                  >
-                    <Trash2 className="h-5 w-5" />
-                  </button>
+                <p className="text-text/70 mb-4">{assignment.description}</p>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm mb-4">
+                  <div>
+                    <span className="text-text/60">Due Date:</span>
+                    <p className="font-medium">{new Date(assignment.due_date).toLocaleDateString()}</p>
+                  </div>
+                  <div>
+                    <span className="text-text/60">Submissions:</span>
+                    <p className="font-medium">{assignmentSubmissions.length}</p>
+                  </div>
+                  <div>
+                    <span className="text-text/60">Created:</span>
+                    <p className="font-medium">{new Date(assignment.created_at).toLocaleDateString()}</p>
+                  </div>
                 </div>
+                <button 
+                  onClick={() => {
+                    console.log('[VIEW_SUBMISSIONS] Viewing submissions for assignment:', assignment.id);
+                    showNotification('success', 'View Submissions feature coming soon!');
+                  }}
+                  className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg text-sm transition-all"
+                >
+                  View Submissions
+                </button>
               </div>
-              <p className="text-text/70 mb-4">{assignment.description}</p>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm mb-4">
-                <div>
-                  <span className="text-text/60">Due Date:</span>
-                  <p className="font-medium">{new Date(assignment.due_date).toLocaleDateString()}</p>
-                </div>
-                <div>
-                  <span className="text-text/60">Submissions:</span>
-                  <p className="font-medium">{assignmentSubmissions.length}</p>
-                </div>
-                <div>
-                  <span className="text-text/60">Created:</span>
-                  <p className="font-medium">{new Date(assignment.created_at).toLocaleDateString()}</p>
-                </div>
-              </div>
-              <button 
-                onClick={() => {
-                  console.log('[VIEW_SUBMISSIONS] Viewing submissions for assignment:', assignment.id);
-                  showNotification('success', 'View Submissions feature coming soon!');
-                }}
-                className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg text-sm transition-all"
-              >
-                View Submissions
-              </button>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
-    </div>
+      
+      <AddAssignmentModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onAssignmentAdded={handleAssignmentAdded}
+      />
+    </>
   );
 }
 
@@ -480,6 +501,7 @@ function AttendanceManagement() {
   const { user } = useAuth();
   const { showNotification } = useNotification();
   const [selectedSession, setSelectedSession] = useState('');
+  const [isMarkingAttendance, setIsMarkingAttendance] = useState(false);
   const [attendanceList, setAttendanceList] = useState<any[]>([]);
   const sessions = getSessions().filter(s => s.trainer_id === user?.id);
   const users = getUsers().filter(u => u.role === 'participant');
@@ -499,6 +521,9 @@ function AttendanceManagement() {
   };
 
   const handleAttendanceChange = async (participantId: string, status: 'present' | 'absent') => {
+    if (isMarkingAttendance) return;
+    
+    setIsMarkingAttendance(true);
     const session = sessions.find(s => s.id === selectedSession);
     const participant = users.find(u => u.id === participantId);
     
@@ -540,6 +565,8 @@ function AttendanceManagement() {
         console.error('[MARK_ATTENDANCE] Error:', error);
         showNotification('error', 'Failed to mark attendance. Please try again.');
       }
+    } finally {
+      setIsMarkingAttendance(false);
     }
   };
 
@@ -584,23 +611,25 @@ function AttendanceManagement() {
                   <div className="flex space-x-2">
                     <button
                       onClick={() => handleAttendanceChange(participant.id, 'present')}
+                      disabled={isMarkingAttendance}
                       className={`px-3 py-1 rounded-full text-sm font-medium ${
                         status === 'present' 
                           ? 'bg-green-500 text-white' 
-                          : 'bg-gray-200 text-gray-700 hover:bg-green-100'
-                      } transition-all`}
+                          : 'bg-gray-200 text-gray-700 hover:bg-green-100 disabled:opacity-50'
+                      } transition-all disabled:cursor-not-allowed`}
                     >
-                      Present
+                      {isMarkingAttendance ? <LoadingSpinner size="sm" /> : 'Present'}
                     </button>
                     <button
                       onClick={() => handleAttendanceChange(participant.id, 'absent')}
+                      disabled={isMarkingAttendance}
                       className={`px-3 py-1 rounded-full text-sm font-medium ${
                         status === 'absent' 
                           ? 'bg-red-500 text-white' 
-                          : 'bg-gray-200 text-gray-700 hover:bg-red-100'
-                      } transition-all`}
+                          : 'bg-gray-200 text-gray-700 hover:bg-red-100 disabled:opacity-50'
+                      } transition-all disabled:cursor-not-allowed`}
                     >
-                      Absent
+                      {isMarkingAttendance ? <LoadingSpinner size="sm" /> : 'Absent'}
                     </button>
                   </div>
                 </div>
