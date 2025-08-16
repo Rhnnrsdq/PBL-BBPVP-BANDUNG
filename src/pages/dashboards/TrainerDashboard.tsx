@@ -564,8 +564,10 @@ function AttendanceManagement() {
       } catch (error) {
         console.error('[MARK_ATTENDANCE] Error:', error);
         showNotification('error', 'Failed to mark attendance. Please try again.');
+      } finally {
+        setIsMarkingAttendance(false);
       }
-    } finally {
+    } else {
       setIsMarkingAttendance(false);
     }
   };

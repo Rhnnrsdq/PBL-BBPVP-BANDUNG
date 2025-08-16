@@ -448,8 +448,10 @@ function MyAssignments() {
       } catch (error) {
         console.error('[SUBMIT_ASSIGNMENT] Error:', error);
         showNotification('error', 'Failed to submit assignment. Please try again.');
+      } finally {
+        setIsSubmitting(false);
       }
-    } finally {
+    } else {
       setIsSubmitting(false);
     }
   };
