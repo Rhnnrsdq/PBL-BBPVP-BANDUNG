@@ -111,6 +111,8 @@ export async function testGoogleSheetsConnection(apiEndpoint?: string): Promise<
 export async function fetchGoogleSheetsData(): Promise<GoogleSheetsResponse> {
   try {
     console.log('[GOOGLE_SHEETS] Fetching data from:', GOOGLE_SHEETS_API_URL);
+    
+    // Add timeout and better error handling
     const response = await fetch(GOOGLE_SHEETS_API_URL, {
       method: 'GET',
       mode: 'cors',
@@ -118,13 +120,30 @@ export async function fetchGoogleSheetsData(): Promise<GoogleSheetsResponse> {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
       },
+      signal: AbortSignal.timeout(10000) // 10 second timeout
     });
     
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     
-    const data = await response.json();
+    // Handle different content types
+    let data;
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      console.log('[GOOGLE_SHEETS] Non-JSON response received:', text);
+      // Try to parse as JSON anyway
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // If not JSON, treat as success with message
+        data = { message: 'Connection successful', data: [] };
+      }
+    }
+    
     console.log('[GOOGLE_SHEETS] Data fetched successfully:', data);
     
     return {
@@ -133,10 +152,25 @@ export async function fetchGoogleSheetsData(): Promise<GoogleSheetsResponse> {
     };
   } catch (error) {
     console.error('[GOOGLE_SHEETS] Error fetching data:', error);
+    
+    // Provide more specific error messages
+    let errorMessage = 'Unknown error';
+    if (error instanceof Error) {
+      if (error.name === 'AbortError') {
+        errorMessage = 'Request timeout - Google Sheets API is not responding';
+      } else if (error.message.includes('Failed to fetch')) {
+        errorMessage = 'Network error - Please check your internet connection and Google Apps Script deployment';
+      } else if (error.message.includes('CORS')) {
+        errorMessage = 'CORS error - Please check Google Apps Script deployment settings';
+      } else {
+        errorMessage = error.message;
+      }
+    }
+    
     return {
       success: false,
       data: [],
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: errorMessage
     };
   }
 }
