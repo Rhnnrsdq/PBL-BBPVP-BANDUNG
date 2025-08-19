@@ -6,6 +6,19 @@ import AddAssignmentModal from '../../components/AddAssignmentModal';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useNotification } from '../../hooks/useNotification';
 import { 
+  getSessions, 
+  getPrograms, 
+  getUsers, 
+  getAttendance,
+  getAssignments,
+  getAssignmentSubmissions,
+  createAttendance,
+  deleteSession,
+  deleteAssignment,
+  updateSession,
+  updateAssignment
+} from '../../utils/googleSheetsApi';
+import { 
   Calendar, 
   Users, 
   BookOpen, 
@@ -20,31 +33,55 @@ import {
   Download,
   Upload
 } from 'lucide-react';
-import { 
-  getSessions, 
-  getPrograms, 
-  getUsers, 
-  getAttendance,
-  getAssignments,
-  getAssignmentSubmissions,
-  addSession,
-  updateSession,
-  deleteSession,
-  addAssignment,
-  updateAssignment,
-  deleteAssignment,
-  addAttendance
-} from '../../data/mockData';
 import { useAuth } from '../../hooks/useAuth';
-import { saveAttendanceRecord, exportParticipantsList } from '../../utils/googleSheetsApi';
 
 function TrainerOverview() {
   const { user } = useAuth();
   const { showNotification } = useNotification();
-  const sessions = getSessions().filter(s => s.trainer_id === user?.id);
-  const programs = getPrograms().filter(p => p.trainer_id === user?.id);
-  const users = getUsers();
-  const attendance = getAttendance();
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [programs, setPrograms] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [sessionsResult, programsResult, usersResult, attendanceResult] = await Promise.all([
+          getSessions(),
+          getPrograms(),
+          getUsers(),
+          getAttendance()
+        ]);
+
+        if (sessionsResult.success) {
+          setSessions(sessionsResult.data.filter((s: any) => s.trainer_id === user?.id));
+        }
+        if (programsResult.success) {
+          setPrograms(programsResult.data.filter((p: any) => p.trainer_id === user?.id));
+        }
+        if (usersResult.success) setUsers(usersResult.data);
+        if (attendanceResult.success) setAttendance(attendanceResult.data);
+      } catch (error) {
+        console.error('[TRAINER_OVERVIEW] Error fetching data:', error);
+        showNotification('error', 'Failed to load dashboard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (user) {
+      fetchData();
+    }
+  }, [user, showNotification]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner size="lg" text="Loading dashboard..." />
+      </div>
+    );
+  }
 
   const todaysSessions = sessions.filter(s => s.date === new Date().toISOString().split('T')[0]);
   const totalParticipants = programs.reduce((sum, p) => sum + p.current_participants, 0);
@@ -230,61 +267,87 @@ function TrainerOverview() {
 
 function SessionsManagement() {
   const { user } = useAuth();
-  const [sessions, setSessions] = useState(getSessions().filter(s => s.trainer_id === user?.id));
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [programs, setPrograms] = useState<any[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [loading, setLoading] = useState(true);
   const { showNotification } = useNotification();
-  const [showAddForm, setShowAddForm] = useState(false);
   const [editingSession, setEditingSession] = useState<any>(null);
-  const programs = getPrograms().filter(p => p.trainer_id === user?.id);
 
-  const handleAddSession = (sessionData: any) => {
-    const newSession = {
-      ...sessionData,
-      id: Date.now().toString(),
-      trainer_id: user?.id || ''
-    };
-    addSession(newSession);
-    setSessions(getSessions().filter(s => s.trainer_id === user?.id));
-    setShowAddForm(false);
+  const fetchSessions = async () => {
+    try {
+      setLoading(true);
+      const [sessionsResult, programsResult] = await Promise.all([
+        getSessions(),
+        getPrograms()
+      ]);
+
+      if (sessionsResult.success) {
+        setSessions(sessionsResult.data.filter((s: any) => s.trainer_id === user?.id));
+      }
+      if (programsResult.success) {
+        setPrograms(programsResult.data.filter((p: any) => p.trainer_id === user?.id));
+      }
+    } catch (error) {
+      console.error('[SESSIONS_MANAGEMENT] Error fetching sessions:', error);
+      showNotification('error', 'Failed to load sessions');
+    } finally {
+      setLoading(false);
+    }
   };
 
+  React.useEffect(() => {
+    if (user) {
+      fetchSessions();
+    }
+  }, [user]);
+
   const handleSessionAdded = () => {
-    setSessions(getSessions().filter(s => s.trainer_id === user?.id));
+    fetchSessions();
   };
 
   const handleDeleteSession = (id: string) => {
     if (window.confirm('Are you sure you want to delete this session?')) {
       try {
         console.log('[DELETE_SESSION] Deleting session:', id);
-        deleteSession(id);
-        setSessions(getSessions().filter(s => s.trainer_id === user?.id));
-        showNotification('success', 'Session deleted successfully!');
+        const result = await deleteSession(id);
+        if (result.success) {
+          await fetchSessions();
+          showNotification('success', 'Session deleted successfully!');
+        } else {
+          throw new Error(result.error || 'Failed to delete session');
+        }
       } catch (error) {
         console.error('[DELETE_SESSION] Error:', error);
-        showNotification('error', 'Failed to delete session. Please try again.');
+        const errorMessage = error instanceof Error ? error.message : 'Failed to delete session';
+        showNotification('error', errorMessage);
       }
     }
   };
 
-  const handleExportParticipants = async (sessionId: string) => {
+  const handleEditSession = (session: any) => {
+    console.log('[EDIT_SESSION] Opening edit for session:', session.id);
+    setEditingSession(session);
+    showNotification('success', 'Edit Session feature will be available soon!');
+  };
+
+  const handleViewParticipants = async (sessionId: string) => {
     try {
-      console.log('[EXPORT_PARTICIPANTS] Exporting participants for session:', sessionId);
-      const blob = await exportParticipantsList(sessionId);
-      if (blob) {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `participants-${sessionId}.csv`;
-        a.click();
-        showNotification('success', 'Participants list exported successfully!');
-      } else {
-        throw new Error('Failed to generate export file');
-      }
+      console.log('[VIEW_PARTICIPANTS] Viewing participants for session:', sessionId);
+      showNotification('success', 'Participants list feature will be available soon!');
     } catch (error) {
-      console.error('[EXPORT_PARTICIPANTS] Error:', error);
-      showNotification('error', 'Failed to export participants list. Please try again.');
+      console.error('[VIEW_PARTICIPANTS] Error:', error);
+      showNotification('error', 'Failed to load participants list');
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner size="lg" text="Loading sessions..." />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -312,17 +375,13 @@ function SessionsManagement() {
                   </div>
                   <div className="flex space-x-2">
                     <button
-                      onClick={() => handleExportParticipants(session.id)}
+                      onClick={() => handleViewParticipants(session.id)}
                       className="text-green-600 hover:text-green-800 transition-colors"
                     >
                       <Download className="h-5 w-5" />
                     </button>
                     <button
-                      onClick={() => {
-                        console.log('[EDIT_SESSION] Editing session:', session.id);
-                        setEditingSession(session);
-                        showNotification('success', 'Edit Session feature coming soon!');
-                      }}
+                      onClick={() => handleEditSession(session)}
                       className="text-secondary hover:text-secondary/80 transition-colors"
                     >
                       <Edit className="h-5 w-5" />
@@ -373,46 +432,91 @@ function SessionsManagement() {
 
 function AssignmentsManagement() {
   const { user } = useAuth();
-  const [assignments, setAssignments] = useState(getAssignments());
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [programs, setPrograms] = useState<any[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const { showNotification } = useNotification();
-  const [submissions, setSubmissions] = useState(getAssignmentSubmissions());
-  const [showAddForm, setShowAddForm] = useState(false);
-  const programs = getPrograms().filter(p => p.trainer_id === user?.id);
 
-  const trainerAssignments = assignments.filter(a => 
-    programs.some(p => p.id === a.training_id)
-  );
+  const fetchAssignments = async () => {
+    try {
+      setLoading(true);
+      const [assignmentsResult, programsResult, submissionsResult] = await Promise.all([
+        getAssignments(),
+        getPrograms(),
+        getAssignmentSubmissions()
+      ]);
 
-  const handleAddAssignment = (assignmentData: any) => {
-    const newAssignment = {
-      ...assignmentData,
-      id: Date.now().toString(),
-      created_by: user?.id || '',
-      created_at: new Date().toISOString()
-    };
-    addAssignment(newAssignment);
-    setAssignments(getAssignments());
-    setShowAddForm(false);
+      if (programsResult.success) {
+        const trainerPrograms = programsResult.data.filter((p: any) => p.trainer_id === user?.id);
+        setPrograms(trainerPrograms);
+        
+        if (assignmentsResult.success) {
+          const trainerAssignments = assignmentsResult.data.filter((a: any) => 
+            trainerPrograms.some((p: any) => p.id === a.training_id)
+          );
+          setAssignments(trainerAssignments);
+        }
+      }
+      
+      if (submissionsResult.success) {
+        setSubmissions(submissionsResult.data);
+      }
+    } catch (error) {
+      console.error('[ASSIGNMENTS_MANAGEMENT] Error fetching assignments:', error);
+      showNotification('error', 'Failed to load assignments');
+    } finally {
+      setLoading(false);
+    }
   };
 
+  React.useEffect(() => {
+    if (user) {
+      fetchAssignments();
+    }
+  }, [user]);
+
   const handleAssignmentAdded = () => {
-    setAssignments(getAssignments());
+    fetchAssignments();
   };
 
   const handleDeleteAssignment = (id: string) => {
     if (window.confirm('Are you sure you want to delete this assignment?')) {
       try {
         console.log('[DELETE_ASSIGNMENT] Deleting assignment:', id);
-        deleteAssignment(id);
-        setAssignments(getAssignments());
-        showNotification('success', 'Assignment deleted successfully!');
+        const result = await deleteAssignment(id);
+        if (result.success) {
+          await fetchAssignments();
+          showNotification('success', 'Assignment deleted successfully!');
+        } else {
+          throw new Error(result.error || 'Failed to delete assignment');
+        }
       } catch (error) {
         console.error('[DELETE_ASSIGNMENT] Error:', error);
-        showNotification('error', 'Failed to delete assignment. Please try again.');
+        const errorMessage = error instanceof Error ? error.message : 'Failed to delete assignment';
+        showNotification('error', errorMessage);
       }
     }
   };
+
+  const handleEditAssignment = (assignment: any) => {
+    console.log('[EDIT_ASSIGNMENT] Opening edit for assignment:', assignment.id);
+    showNotification('success', 'Edit Assignment feature will be available soon!');
+  };
+
+  const handleViewSubmissions = (assignmentId: string) => {
+    console.log('[VIEW_SUBMISSIONS] Viewing submissions for assignment:', assignmentId);
+    showNotification('success', 'View Submissions feature will be available soon!');
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner size="lg" text="Loading assignments..." />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -429,7 +533,7 @@ function AssignmentsManagement() {
         </div>
 
         <div className="grid gap-6">
-          {trainerAssignments.map((assignment) => {
+          {assignments.map((assignment) => {
             const program = programs.find(p => p.id === assignment.training_id);
             const assignmentSubmissions = submissions.filter(s => s.assignment_id === assignment.id);
             
@@ -442,10 +546,7 @@ function AssignmentsManagement() {
                   </div>
                   <div className="flex space-x-2">
                     <button 
-                      onClick={() => {
-                        console.log('[EDIT_ASSIGNMENT] Editing assignment:', assignment.id);
-                        showNotification('success', 'Edit Assignment feature coming soon!');
-                      }}
+                      onClick={() => handleEditAssignment(assignment)}
                       className="text-secondary hover:text-secondary/80 transition-colors"
                     >
                       <Edit className="h-5 w-5" />
@@ -474,10 +575,7 @@ function AssignmentsManagement() {
                   </div>
                 </div>
                 <button 
-                  onClick={() => {
-                    console.log('[VIEW_SUBMISSIONS] Viewing submissions for assignment:', assignment.id);
-                    showNotification('success', 'View Submissions feature coming soon!');
-                  }}
+                  onClick={() => handleViewSubmissions(assignment.id)}
                   className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg text-sm transition-all"
                 >
                   View Submissions
@@ -503,14 +601,47 @@ function AttendanceManagement() {
   const [selectedSession, setSelectedSession] = useState('');
   const [isMarkingAttendance, setIsMarkingAttendance] = useState(false);
   const [attendanceList, setAttendanceList] = useState<any[]>([]);
-  const sessions = getSessions().filter(s => s.trainer_id === user?.id);
-  const users = getUsers().filter(u => u.role === 'participant');
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [sessionsResult, usersResult, attendanceResult] = await Promise.all([
+          getSessions(),
+          getUsers(),
+          getAttendance()
+        ]);
+
+        if (sessionsResult.success) {
+          setSessions(sessionsResult.data.filter((s: any) => s.trainer_id === user?.id));
+        }
+        if (usersResult.success) {
+          setUsers(usersResult.data.filter((u: any) => u.role === 'participant'));
+        }
+        if (attendanceResult.success) {
+          setAttendance(attendanceResult.data);
+        }
+      } catch (error) {
+        console.error('[ATTENDANCE_MANAGEMENT] Error fetching data:', error);
+        showNotification('error', 'Failed to load attendance data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (user) {
+      fetchData();
+    }
+  }, [user, showNotification]);
 
   const handleSessionSelect = (sessionId: string) => {
     setSelectedSession(sessionId);
-    const attendance = getAttendance().filter(a => a.session_id === sessionId);
+    const sessionAttendance = attendance.filter(a => a.session_id === sessionId);
     const attendanceWithUsers = users.map(participant => {
-      const record = attendance.find(a => a.participant_id === participant.id);
+      const record = sessionAttendance.find(a => a.participant_id === participant.id);
       return {
         participant,
         status: record?.status || 'absent',
@@ -532,38 +663,33 @@ function AttendanceManagement() {
         console.log('[MARK_ATTENDANCE] Trainer marking attendance:', { participantId, status, sessionId: selectedSession });
         
         const attendanceRecord = {
-          id: Date.now().toString(),
           session_id: selectedSession,
           participant_id: participantId,
           status,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          marked_by: user.id
         };
 
-        addAttendance(attendanceRecord);
-        
-        // Save to Google Sheets
-        await saveAttendanceRecord({
-          sessionId: selectedSession,
-          participantId,
-          participantName: participant.name,
-          status,
-          timestamp: attendanceRecord.timestamp,
-          sessionTitle: session.title
-        });
+        const result = await createAttendance(attendanceRecord);
 
-        // Update local state
-        setAttendanceList(prev => 
-          prev.map(item => 
-            item.participant.id === participantId 
-              ? { ...item, status, id: attendanceRecord.id }
-              : item
-          )
-        );
-        
-        showNotification('success', `Attendance marked as ${status} for ${participant.name}`);
+        if (result.success) {
+          // Update local state
+          setAttendanceList(prev => 
+            prev.map(item => 
+              item.participant.id === participantId 
+                ? { ...item, status, id: result.data?.id || Date.now().toString() }
+                : item
+            )
+          );
+          
+          showNotification('success', `Attendance marked as ${status} for ${participant.name}`);
+        } else {
+          throw new Error(result.error || 'Failed to mark attendance');
+        }
       } catch (error) {
         console.error('[MARK_ATTENDANCE] Error:', error);
-        showNotification('error', 'Failed to mark attendance. Please try again.');
+        const errorMessage = error instanceof Error ? error.message : 'Failed to mark attendance';
+        showNotification('error', errorMessage);
       } finally {
         setIsMarkingAttendance(false);
       }
@@ -571,6 +697,14 @@ function AttendanceManagement() {
       setIsMarkingAttendance(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner size="lg" text="Loading attendance..." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -647,9 +781,41 @@ function AttendanceManagement() {
 function ParticipantsManagement() {
   const { user } = useAuth();
   const { showNotification } = useNotification();
-  const programs = getPrograms().filter(p => p.trainer_id === user?.id);
-  const users = getUsers().filter(u => u.role === 'participant');
-  const attendance = getAttendance();
+  const [programs, setPrograms] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [programsResult, usersResult, attendanceResult] = await Promise.all([
+          getPrograms(),
+          getUsers(),
+          getAttendance()
+        ]);
+
+        if (programsResult.success) {
+          setPrograms(programsResult.data.filter((p: any) => p.trainer_id === user?.id));
+        }
+        if (usersResult.success) {
+          setUsers(usersResult.data.filter((u: any) => u.role === 'participant'));
+        }
+        if (attendanceResult.success) {
+          setAttendance(attendanceResult.data);
+        }
+      } catch (error) {
+        console.error('[PARTICIPANTS_MANAGEMENT] Error fetching data:', error);
+        showNotification('error', 'Failed to load participants data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (user) {
+      fetchData();
+    }
+  }, [user, showNotification]);
 
   const participantsWithStats = users.map(participant => {
     const participantAttendance = attendance.filter(a => a.participant_id === participant.id);
@@ -663,6 +829,19 @@ function ParticipantsManagement() {
       totalSessions: participantAttendance.length
     };
   });
+
+  const handleViewParticipantDetails = (participantId: string) => {
+    console.log('[VIEW_PARTICIPANT_DETAILS] Viewing details for participant:', participantId);
+    showNotification('success', 'Participant details feature will be available soon!');
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner size="lg" text="Loading participants..." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -709,10 +888,7 @@ function ParticipantsManagement() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <button 
-                      onClick={() => {
-                        console.log('[VIEW_PARTICIPANT] Viewing participant details:', participant.id);
-                        showNotification('success', 'View Participant Details feature coming soon!');
-                      }}
+                      onClick={() => handleViewParticipantDetails(participant.id)}
                       className="text-secondary hover:text-secondary/80 transition-colors"
                     >
                       View Details

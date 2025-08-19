@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchGoogleSheetsData, GoogleSheetsResponse } from '../utils/googleSheetsApi';
+import { testGoogleSheetsConnection, GoogleSheetsResponse } from '../utils/googleSheetsApi';
 
 export function useGoogleSheets() {
   const [data, setData] = useState<any[]>([]);
@@ -11,21 +11,22 @@ export function useGoogleSheets() {
     setError(null);
     
     try {
-      const result = await fetchGoogleSheetsData();
+      console.log('[GOOGLE_SHEETS_HOOK] Testing connection...');
+      const result = await testGoogleSheetsConnection();
       
       if (result.success) {
         setData(result.data);
+        console.log('[GOOGLE_SHEETS_HOOK] Connection successful:', result.data);
       } else {
-        const errorMsg = result.error || 'Failed to fetch data from Google Sheets';
+        const errorMsg = result.error || 'Failed to connect to Google Sheets';
         setError(errorMsg);
-        console.warn('[GOOGLE_SHEETS_HOOK] Failed to fetch data:', errorMsg);
-        // Don't throw error, just set error state
+        console.warn('[GOOGLE_SHEETS_HOOK] Connection failed:', errorMsg);
       }
     } catch (err) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[GOOGLE_SHEETS_HOOK] Error fetching data:', errorMsg);
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('[GOOGLE_SHEETS_HOOK] Error:', errorMsg);
       setError(errorMsg);
-      // Don't re-throw the error to prevent app crashes
+    } finally {
       setLoading(false);
     }
   };

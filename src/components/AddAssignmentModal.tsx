@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, FileText, Calendar, BookOpen } from 'lucide-react';
-import { addAssignment, getPrograms } from '../data/mockData';
+import { createAssignment, getPrograms } from '../utils/googleSheetsApi';
 import { useNotification } from '../hooks/useNotification';
 import { useAuth } from '../hooks/useAuth';
 import LoadingSpinner from './LoadingSpinner';
@@ -13,6 +13,7 @@ interface AddAssignmentModalProps {
 
 export default function AddAssignmentModal({ isOpen, onClose, onAssignmentAdded }: AddAssignmentModalProps) {
   const { user } = useAuth();
+  const [programs, setPrograms] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     training_id: '',
     title: '',
@@ -23,7 +24,23 @@ export default function AddAssignmentModal({ isOpen, onClose, onAssignmentAdded 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { showNotification } = useNotification();
 
-  const programs = getPrograms().filter(p => p.trainer_id === user?.id);
+  React.useEffect(() => {
+    const fetchPrograms = async () => {
+      try {
+        const result = await getPrograms();
+        if (result.success) {
+          const trainerPrograms = result.data.filter((p: any) => p.trainer_id === user?.id);
+          setPrograms(trainerPrograms);
+        }
+      } catch (error) {
+        console.error('[ADD_ASSIGNMENT] Error fetching programs:', error);
+      }
+    };
+    
+    if (isOpen && user) {
+      fetchPrograms();
+    }
+  }, [isOpen, user]);
 
   if (!isOpen) return null;
 
@@ -63,8 +80,7 @@ export default function AddAssignmentModal({ isOpen, onClose, onAssignmentAdded 
     try {
       console.log('[ADD_ASSIGNMENT] Starting assignment creation:', formData);
       
-      const newAssignment = {
-        id: Date.now().toString(),
+      const assignmentData = {
         training_id: formData.training_id,
         title: formData.title,
         description: formData.description,
@@ -73,28 +89,34 @@ export default function AddAssignmentModal({ isOpen, onClose, onAssignmentAdded 
         created_at: new Date().toISOString()
       };
 
-      addAssignment(newAssignment);
-      console.log('[ADD_ASSIGNMENT] Assignment created successfully:', newAssignment.id);
+      const result = await createAssignment(assignmentData);
       
-      showNotification('success', `Assignment "${formData.title}" added successfully!`);
-      onAssignmentAdded();
-      onClose();
-      
-      // Reset form
-      setFormData({
-        training_id: '',
-        title: '',
-        description: '',
-        due_date: ''
-      });
-      setErrors({});
+      if (result.success) {
+        console.log('[ADD_ASSIGNMENT] Assignment created successfully');
+        showNotification('success', `Assignment "${formData.title}" added successfully!`);
+        onAssignmentAdded();
+        onClose();
+        
+        // Reset form
+        setFormData({
+          training_id: '',
+          title: '',
+          description: '',
+          due_date: ''
+        });
+        setErrors({});
+      } else {
+        throw new Error(result.error || 'Failed to create assignment');
+      }
     } catch (error) {
       console.error('[ADD_ASSIGNMENT] Error creating assignment:', error);
-      showNotification('error', 'Failed to add assignment. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add assignment';
+      showNotification('error', errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
+      
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;

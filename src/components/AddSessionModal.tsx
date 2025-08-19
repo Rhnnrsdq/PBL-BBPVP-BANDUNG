@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Calendar, Clock, MapPin, FileText } from 'lucide-react';
-import { addSession, getPrograms } from '../data/mockData';
+import { createSession, getPrograms } from '../utils/googleSheetsApi';
 import { useNotification } from '../hooks/useNotification';
 import { useAuth } from '../hooks/useAuth';
 import LoadingSpinner from './LoadingSpinner';
@@ -13,6 +13,7 @@ interface AddSessionModalProps {
 
 export default function AddSessionModal({ isOpen, onClose, onSessionAdded }: AddSessionModalProps) {
   const { user } = useAuth();
+  const [programs, setPrograms] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     training_id: '',
     date: '',
@@ -25,7 +26,23 @@ export default function AddSessionModal({ isOpen, onClose, onSessionAdded }: Add
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { showNotification } = useNotification();
 
-  const programs = getPrograms().filter(p => p.trainer_id === user?.id);
+  React.useEffect(() => {
+    const fetchPrograms = async () => {
+      try {
+        const result = await getPrograms();
+        if (result.success) {
+          const trainerPrograms = result.data.filter((p: any) => p.trainer_id === user?.id);
+          setPrograms(trainerPrograms);
+        }
+      } catch (error) {
+        console.error('[ADD_SESSION] Error fetching programs:', error);
+      }
+    };
+    
+    if (isOpen && user) {
+      fetchPrograms();
+    }
+  }, [isOpen, user]);
 
   if (!isOpen) return null;
 
@@ -62,41 +79,47 @@ export default function AddSessionModal({ isOpen, onClose, onSessionAdded }: Add
     try {
       console.log('[ADD_SESSION] Starting session creation:', formData);
       
-      const newSession = {
-        id: Date.now().toString(),
+      const sessionData = {
         training_id: formData.training_id,
         date: formData.date,
         time_slot: formData.time_slot,
         trainer_id: user?.id || '',
         title: formData.title,
-        description: formData.description || undefined,
-        location: formData.location || undefined
+        description: formData.description,
+        location: formData.location,
+        created_at: new Date().toISOString()
       };
 
-      addSession(newSession);
-      console.log('[ADD_SESSION] Session created successfully:', newSession.id);
+      const result = await createSession(sessionData);
       
-      showNotification('success', `Session "${formData.title}" added successfully!`);
-      onSessionAdded();
-      onClose();
-      
-      // Reset form
-      setFormData({
-        training_id: '',
-        date: '',
-        time_slot: 'AM',
-        title: '',
-        description: '',
-        location: ''
-      });
-      setErrors({});
+      if (result.success) {
+        console.log('[ADD_SESSION] Session created successfully');
+        showNotification('success', `Session "${formData.title}" added successfully!`);
+        onSessionAdded();
+        onClose();
+        
+        // Reset form
+        setFormData({
+          training_id: '',
+          date: '',
+          time_slot: 'AM',
+          title: '',
+          description: '',
+          location: ''
+        });
+        setErrors({});
+      } else {
+        throw new Error(result.error || 'Failed to create session');
+      }
     } catch (error) {
       console.error('[ADD_SESSION] Error creating session:', error);
-      showNotification('error', 'Failed to add session. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add session';
+      showNotification('error', errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
+      
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;

@@ -4,6 +4,17 @@ import DashboardLayout from '../../components/DashboardLayout';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useNotification } from '../../hooks/useNotification';
 import { 
+  getPrograms, 
+  getSessions, 
+  getAttendance,
+  getEnrollments,
+  getAssignments,
+  getAssignmentSubmissions,
+  createAttendance,
+  createEnrollment,
+  createAssignmentSubmission
+} from '../../utils/googleSheetsApi';
+import { 
   BookOpen, 
   Calendar, 
   FileText, 
@@ -17,34 +28,74 @@ import {
   Plus,
   Eye
 } from 'lucide-react';
-import { 
-  getPrograms, 
-  getSessions, 
-  getAttendance,
-  getEnrollments,
-  getAssignments,
-  getAssignmentSubmissions,
-  addAttendance,
-  addEnrollment,
-  addAssignmentSubmission
-} from '../../data/mockData';
 import { useAuth } from '../../hooks/useAuth';
-import { saveAttendanceRecord, saveAssignmentSubmission } from '../../utils/googleSheetsApi';
 
 function ParticipantOverview() {
   const { user } = useAuth();
   const { showNotification } = useNotification();
   
-  const allPrograms = getPrograms();
-  const enrollments = getEnrollments().filter(e => e.participant_id === user?.id);
-  const enrolledPrograms = allPrograms.filter(p => 
-    enrollments.some(e => e.training_id === p.id)
-  );
-  
-  const sessions = getSessions();
-  const attendance = getAttendance().filter(a => a.participant_id === user?.id);
-  const assignments = getAssignments();
-  const submissions = getAssignmentSubmissions().filter(s => s.participant_id === user?.id);
+  const [allPrograms, setAllPrograms] = useState<any[]>([]);
+  const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [enrolledPrograms, setEnrolledPrograms] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [
+          programsResult,
+          enrollmentsResult,
+          sessionsResult,
+          attendanceResult,
+          assignmentsResult,
+          submissionsResult
+        ] = await Promise.all([
+          getPrograms(),
+          getEnrollments(),
+          getSessions(),
+          getAttendance(),
+          getAssignments(),
+          getAssignmentSubmissions()
+        ]);
+
+        if (programsResult.success) setAllPrograms(programsResult.data);
+        
+        if (enrollmentsResult.success) {
+          const userEnrollments = enrollmentsResult.data.filter((e: any) => e.participant_id === user?.id);
+          setEnrollments(userEnrollments);
+          
+          if (programsResult.success) {
+            const userPrograms = programsResult.data.filter((p: any) => 
+              userEnrollments.some((e: any) => e.training_id === p.id)
+            );
+            setEnrolledPrograms(userPrograms);
+          }
+        }
+        
+        if (sessionsResult.success) setSessions(sessionsResult.data);
+        if (attendanceResult.success) {
+          setAttendance(attendanceResult.data.filter((a: any) => a.participant_id === user?.id));
+        }
+        if (assignmentsResult.success) setAssignments(assignmentsResult.data);
+        if (submissionsResult.success) {
+          setSubmissions(submissionsResult.data.filter((s: any) => s.participant_id === user?.id));
+        }
+      } catch (error) {
+        console.error('[PARTICIPANT_OVERVIEW] Error fetching data:', error);
+        showNotification('error', 'Failed to load dashboard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (user) {
+      fetchData();
+    }
+  }, [user, showNotification]);
   
   const upcomingSessions = sessions.filter(s => {
     const sessionDate = new Date(s.date);
@@ -88,6 +139,14 @@ function ParticipantOverview() {
       color: 'bg-orange-500'
     }
   ];
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner size="lg" text="Loading dashboard..." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -284,9 +343,37 @@ function ParticipantOverview() {
 
 function MyTrainings() {
   const { user } = useAuth();
-  const [availablePrograms, setAvailablePrograms] = useState(getPrograms());
+  const [availablePrograms, setAvailablePrograms] = useState<any[]>([]);
+  const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const { showNotification } = useNotification();
-  const enrollments = getEnrollments().filter(e => e.participant_id === user?.id);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [programsResult, enrollmentsResult] = await Promise.all([
+        getPrograms(),
+        getEnrollments()
+      ]);
+
+      if (programsResult.success) setAvailablePrograms(programsResult.data);
+      if (enrollmentsResult.success) {
+        setEnrollments(enrollmentsResult.data.filter((e: any) => e.participant_id === user?.id));
+      }
+    } catch (error) {
+      console.error('[MY_TRAININGS] Error fetching data:', error);
+      showNotification('error', 'Failed to load training data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (user) {
+      fetchData();
+    }
+  }, [user]);
+
   const enrolledPrograms = availablePrograms.filter(p => 
     enrollments.some(e => e.training_id === p.id)
   );
@@ -298,22 +385,35 @@ function MyTrainings() {
     if (user) {
       try {
         console.log('[ENROLL_PROGRAM] Enrolling user in program:', programId);
-        const enrollment = {
-          id: Date.now().toString(),
+        const enrollmentData = {
           participant_id: user.id,
           training_id: programId,
           enrolled_at: new Date().toISOString(),
-          status: 'active' as const
+          status: 'active'
         };
-        addEnrollment(enrollment);
-        setAvailablePrograms(getPrograms());
-        showNotification('success', 'Successfully enrolled in the program!');
+        
+        const result = await createEnrollment(enrollmentData);
+        if (result.success) {
+          await fetchData();
+          showNotification('success', 'Successfully enrolled in the program!');
+        } else {
+          throw new Error(result.error || 'Failed to enroll in program');
+        }
       } catch (error) {
         console.error('[ENROLL_PROGRAM] Error:', error);
-        showNotification('error', 'Failed to enroll in program. Please try again.');
+        const errorMessage = error instanceof Error ? error.message : 'Failed to enroll in program';
+        showNotification('error', errorMessage);
       }
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner size="lg" text="Loading trainings..." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -405,13 +505,50 @@ function MyAssignments() {
   const { user } = useAuth();
   const { showNotification } = useNotification();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const enrollments = getEnrollments().filter(e => e.participant_id === user?.id);
-  const assignments = getAssignments().filter(a => 
-    enrollments.some(e => e.training_id === a.training_id)
-  );
-  const submissions = getAssignmentSubmissions().filter(s => s.participant_id === user?.id);
+  const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedAssignment, setSelectedAssignment] = useState<string>('');
   const [submissionContent, setSubmissionContent] = useState('');
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [enrollmentsResult, assignmentsResult, submissionsResult] = await Promise.all([
+        getEnrollments(),
+        getAssignments(),
+        getAssignmentSubmissions()
+      ]);
+
+      if (enrollmentsResult.success) {
+        const userEnrollments = enrollmentsResult.data.filter((e: any) => e.participant_id === user?.id);
+        setEnrollments(userEnrollments);
+        
+        if (assignmentsResult.success) {
+          const userAssignments = assignmentsResult.data.filter((a: any) => 
+            userEnrollments.some((e: any) => e.training_id === a.training_id)
+          );
+          setAssignments(userAssignments);
+        }
+      }
+      
+      if (submissionsResult.success) {
+        setSubmissions(submissionsResult.data.filter((s: any) => s.participant_id === user?.id));
+      }
+    } catch (error) {
+      console.error('[MY_ASSIGNMENTS] Error fetching data:', error);
+      showNotification('error', 'Failed to load assignments data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (user) {
+      fetchData();
+    }
+  }, [user]);
 
   const handleSubmitAssignment = async () => {
     if (isSubmitting) return;
@@ -420,34 +557,28 @@ function MyAssignments() {
     if (user && selectedAssignment && submissionContent.trim()) {
       try {
         console.log('[SUBMIT_ASSIGNMENT] Submitting assignment:', selectedAssignment);
-        const assignment = assignments.find(a => a.id === selectedAssignment);
-        if (assignment) {
-          const submission = {
-            id: Date.now().toString(),
-            assignment_id: selectedAssignment,
-            participant_id: user.id,
-            content: submissionContent,
-            submitted_at: new Date().toISOString()
-          };
+        
+        const submissionData = {
+          assignment_id: selectedAssignment,
+          participant_id: user.id,
+          content: submissionContent,
+          submitted_at: new Date().toISOString()
+        };
 
-          addAssignmentSubmission(submission);
-          
-          // Save to Google Sheets
-          await saveAssignmentSubmission({
-            assignmentId: selectedAssignment,
-            participantId: user.id,
-            participantName: user.name,
-            content: submissionContent,
-            submittedAt: submission.submitted_at
-          });
-
+        const result = await createAssignmentSubmission(submissionData);
+        
+        if (result.success) {
+          await fetchData();
           setSubmissionContent('');
           setSelectedAssignment('');
           showNotification('success', 'Assignment submitted successfully!');
+        } else {
+          throw new Error(result.error || 'Failed to submit assignment');
         }
       } catch (error) {
         console.error('[SUBMIT_ASSIGNMENT] Error:', error);
-        showNotification('error', 'Failed to submit assignment. Please try again.');
+        const errorMessage = error instanceof Error ? error.message : 'Failed to submit assignment';
+        showNotification('error', errorMessage);
       } finally {
         setIsSubmitting(false);
       }
@@ -455,6 +586,14 @@ function MyAssignments() {
       setIsSubmitting(false);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner size="lg" text="Loading assignments..." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -558,15 +697,57 @@ function MyAttendance() {
   const { user } = useAuth();
   const { showNotification } = useNotification();
   const [isMarkingAttendance, setIsMarkingAttendance] = useState(false);
-  const [selectedSession, setSelectedSession] = useState('');
-  const enrollments = getEnrollments().filter(e => e.participant_id === user?.id);
-  const enrolledPrograms = getPrograms().filter(p => 
-    enrollments.some(e => e.training_id === p.id)
-  );
-  const availableSessions = getSessions().filter(s => 
-    enrolledPrograms.some(p => p.id === s.training_id)
-  );
-  const attendance = getAttendance().filter(a => a.participant_id === user?.id);
+  const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [enrolledPrograms, setEnrolledPrograms] = useState<any[]>([]);
+  const [availableSessions, setAvailableSessions] = useState<any[]>([]);
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [enrollmentsResult, programsResult, sessionsResult, attendanceResult] = await Promise.all([
+        getEnrollments(),
+        getPrograms(),
+        getSessions(),
+        getAttendance()
+      ]);
+
+      if (enrollmentsResult.success) {
+        const userEnrollments = enrollmentsResult.data.filter((e: any) => e.participant_id === user?.id);
+        setEnrollments(userEnrollments);
+        
+        if (programsResult.success) {
+          const userPrograms = programsResult.data.filter((p: any) => 
+            userEnrollments.some((e: any) => e.training_id === p.id)
+          );
+          setEnrolledPrograms(userPrograms);
+          
+          if (sessionsResult.success) {
+            const userSessions = sessionsResult.data.filter((s: any) => 
+              userPrograms.some((p: any) => p.id === s.training_id)
+            );
+            setAvailableSessions(userSessions);
+          }
+        }
+      }
+      
+      if (attendanceResult.success) {
+        setAttendance(attendanceResult.data.filter((a: any) => a.participant_id === user?.id));
+      }
+    } catch (error) {
+      console.error('[MY_ATTENDANCE] Error fetching data:', error);
+      showNotification('error', 'Failed to load attendance data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    if (user) {
+      fetchData();
+    }
+  }, [user]);
 
   const handleMarkAttendance = async (sessionId: string) => {
     if (isMarkingAttendance) return;
@@ -580,6 +761,7 @@ function MyAttendance() {
         const existingAttendance = attendance.find(a => a.session_id === sessionId);
         if (existingAttendance) {
           showNotification('error', 'You have already marked attendance for this session!');
+          setIsMarkingAttendance(false);
           return;
         }
         
@@ -592,6 +774,7 @@ function MyAttendance() {
           
           if (!isToday) {
             showNotification('error', 'You can only mark attendance on the session date!');
+            setIsMarkingAttendance(false);
             return;
           }
           
@@ -601,34 +784,30 @@ function MyAttendance() {
           
           if (!isValidTime) {
             showNotification('error', `You can only mark attendance during the session time (${session.time_slot === 'AM' ? '08:00-12:00' : '13:00-17:00'})!`);
+            setIsMarkingAttendance(false);
             return;
           }
 
-          const attendanceRecord = {
-            id: Date.now().toString(),
+          const attendanceData = {
             session_id: sessionId,
             participant_id: user.id,
-            status: 'present' as const,
+            status: 'present',
             timestamp: new Date().toISOString()
           };
 
-          addAttendance(attendanceRecord);
+          const result = await createAttendance(attendanceData);
           
-          // Save to Google Sheets
-          await saveAttendanceRecord({
-            sessionId,
-            participantId: user.id,
-            participantName: user.name,
-            status: 'present',
-            timestamp: attendanceRecord.timestamp,
-            sessionTitle: session.title
-          });
-
-          showNotification('success', 'Attendance marked successfully!');
+          if (result.success) {
+            await fetchData();
+            showNotification('success', 'Attendance marked successfully!');
+          } else {
+            throw new Error(result.error || 'Failed to mark attendance');
+          }
         }
       } catch (error) {
         console.error('[MARK_ATTENDANCE] Error:', error);
-        showNotification('error', 'Failed to mark attendance. Please try again.');
+        const errorMessage = error instanceof Error ? error.message : 'Failed to mark attendance';
+        showNotification('error', errorMessage);
       } finally {
         setIsMarkingAttendance(false);
       }
@@ -638,6 +817,14 @@ function MyAttendance() {
   const todaySessions = availableSessions.filter(s => 
     s.date === new Date().toISOString().split('T')[0]
   );
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner size="lg" text="Loading attendance..." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -731,20 +918,79 @@ function MyAttendance() {
 
 function ProgressTracking() {
   const { user } = useAuth();
-  const enrollments = getEnrollments().filter(e => e.participant_id === user?.id);
-  const enrolledPrograms = getPrograms().filter(p => 
-    enrollments.some(e => e.training_id === p.id)
-  );
-  const attendance = getAttendance().filter(a => a.participant_id === user?.id);
-  const assignments = getAssignments().filter(a => 
-    enrolledPrograms.some(p => p.id === a.training_id)
-  );
-  const submissions = getAssignmentSubmissions().filter(s => s.participant_id === user?.id);
+  const [enrollments, setEnrollments] = useState<any[]>([]);
+  const [enrolledPrograms, setEnrolledPrograms] = useState<any[]>([]);
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [assignments, setAssignments] = useState<any[]>([]);
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { showNotification } = useNotification();
+
+  React.useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [
+          enrollmentsResult,
+          programsResult,
+          attendanceResult,
+          assignmentsResult,
+          submissionsResult,
+          sessionsResult
+        ] = await Promise.all([
+          getEnrollments(),
+          getPrograms(),
+          getAttendance(),
+          getAssignments(),
+          getAssignmentSubmissions(),
+          getSessions()
+        ]);
+
+        if (enrollmentsResult.success) {
+          const userEnrollments = enrollmentsResult.data.filter((e: any) => e.participant_id === user?.id);
+          setEnrollments(userEnrollments);
+          
+          if (programsResult.success) {
+            const userPrograms = programsResult.data.filter((p: any) => 
+              userEnrollments.some((e: any) => e.training_id === p.id)
+            );
+            setEnrolledPrograms(userPrograms);
+            
+            if (assignmentsResult.success) {
+              const userAssignments = assignmentsResult.data.filter((a: any) => 
+                userPrograms.some((p: any) => p.id === a.training_id)
+              );
+              setAssignments(userAssignments);
+            }
+          }
+        }
+        
+        if (attendanceResult.success) {
+          setAttendance(attendanceResult.data.filter((a: any) => a.participant_id === user?.id));
+        }
+        if (submissionsResult.success) {
+          setSubmissions(submissionsResult.data.filter((s: any) => s.participant_id === user?.id));
+        }
+        if (sessionsResult.success) {
+          setSessions(sessionsResult.data);
+        }
+      } catch (error) {
+        console.error('[PROGRESS_TRACKING] Error fetching data:', error);
+        showNotification('error', 'Failed to load progress data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (user) {
+      fetchData();
+    }
+  }, [user, showNotification]);
 
   const progressData = enrolledPrograms.map(program => {
     const programAttendance = attendance.filter(a => {
-      const sessions = getSessions().filter(s => s.training_id === program.id);
-      return sessions.some(s => s.id === a.session_id);
+      const programSessions = sessions.filter(s => s.training_id === program.id);
+      return programSessions.some(s => s.id === a.session_id);
     });
     
     const programAssignments = assignments.filter(a => a.training_id === program.id);
@@ -772,6 +1018,14 @@ function ProgressTracking() {
       completedAssignments: programSubmissions.length
     };
   });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner size="lg" text="Loading progress..." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

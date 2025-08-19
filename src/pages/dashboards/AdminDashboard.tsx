@@ -3,10 +3,23 @@ import { Routes, Route } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
 import AddUserModal from '../../components/AddUserModal';
 import AddProgramModal from '../../components/AddProgramModal';
+import EditUserModal from '../../components/EditUserModal';
+import EditProgramModal from '../../components/EditProgramModal';
 import GoogleSheetsSync from '../../components/GoogleSheetsSync';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useNotification } from '../../hooks/useNotification';
-import { testGoogleSheetsConnection } from '../../utils/googleSheetsApi';
+import { 
+  testGoogleSheetsConnection,
+  getUsers,
+  getPrograms,
+  getSessions,
+  getAttendance,
+  deleteUser,
+  deleteProgram,
+  exportUsersReport,
+  exportProgramsReport,
+  exportAttendanceReport
+} from '../../utils/googleSheetsApi';
 import { 
   Users, 
   BookOpen, 
@@ -20,26 +33,47 @@ import {
   Trash2,
   Download
 } from 'lucide-react';
-import { 
-  getUsers, 
-  getPrograms, 
-  getSessions, 
-  getAttendance,
-  getAssignments,
-  deleteUser,
-  deleteProgram,
-  deleteSession,
-  addProgram,
-  addSession,
-  addUser
-} from '../../data/mockData';
 
 function AdminOverview() {
   const { showNotification } = useNotification();
-  const users = getUsers();
-  const programs = getPrograms();
-  const sessions = getSessions();
-  const attendance = getAttendance();
+  const [users, setUsers] = useState<any[]>([]);
+  const [programs, setPrograms] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  React.useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [usersResult, programsResult, sessionsResult, attendanceResult] = await Promise.all([
+          getUsers(),
+          getPrograms(),
+          getSessions(),
+          getAttendance()
+        ]);
+
+        if (usersResult.success) setUsers(usersResult.data);
+        if (programsResult.success) setPrograms(programsResult.data);
+        if (sessionsResult.success) setSessions(sessionsResult.data);
+        if (attendanceResult.success) setAttendance(attendanceResult.data);
+      } catch (error) {
+        console.error('[ADMIN_OVERVIEW] Error fetching data:', error);
+        showNotification('error', 'Failed to load dashboard data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [showNotification]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner size="lg" text="Loading dashboard..." />
+      </div>
+    );
+  }
 
   const stats = [
     {
@@ -227,44 +261,123 @@ function AdminOverview() {
 }
 
 function UsersManagement() {
-  const [users, setUsers] = useState(getUsers());
+  const [users, setUsers] = useState<any[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const { showNotification } = useNotification();
+
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      const result = await getUsers();
+      if (result.success) {
+        setUsers(result.data);
+      } else {
+        throw new Error(result.error || 'Failed to fetch users');
+      }
+    } catch (error) {
+      console.error('[USERS_MANAGEMENT] Error fetching users:', error);
+      showNotification('error', 'Failed to load users');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchUsers();
+  }, []);
 
   const handleDeleteUser = (id: string) => {
     if (window.confirm('Are you sure you want to delete this user?')) {
       try {
         console.log('[DELETE_USER] Deleting user:', id);
-        deleteUser(id);
-        setUsers(getUsers());
-        showNotification('success', 'User deleted successfully!');
+        const result = await deleteUser(id);
+        if (result.success) {
+          await fetchUsers();
+          showNotification('success', 'User deleted successfully!');
+        } else {
+          throw new Error(result.error || 'Failed to delete user');
+        }
       } catch (error) {
         console.error('[DELETE_USER] Error:', error);
-        showNotification('error', 'Failed to delete user. Please try again.');
+        const errorMessage = error instanceof Error ? error.message : 'Failed to delete user';
+        showNotification('error', errorMessage);
       }
     }
   };
 
   const handleUserAdded = () => {
-    setUsers(getUsers());
+    fetchUsers();
   };
+
+  const handleUserUpdated = () => {
+    fetchUsers();
+  };
+
+  const handleEditUser = (user: any) => {
+    console.log('[EDIT_USER] Opening edit modal for user:', user.id);
+    setEditingUser(user);
+    setShowEditModal(true);
+  };
+
+  const handleExportUsers = async () => {
+    try {
+      console.log('[EXPORT_USERS] Starting export...');
+      const result = await exportUsersReport();
+      if (result.success) {
+        // Create downloadable file
+        const dataStr = JSON.stringify(result.data, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `users-report-${new Date().toISOString().split('T')[0]}.json`;
+        link.click();
+        showNotification('success', 'Users report exported successfully!');
+      } else {
+        throw new Error(result.error || 'Failed to export users');
+      }
+    } catch (error) {
+      console.error('[EXPORT_USERS] Error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to export users';
+      showNotification('error', errorMessage);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner size="lg" text="Loading users..." />
+      </div>
+    );
+  }
 
   return (
     <>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-text">Users Management</h1>
-          <button
-            onClick={() => {
-              console.log('[ADD_USER] Opening add user modal');
-              setShowAddModal(true);
-            }}
-            className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-all"
-          >
-            <UserPlus className="h-5 w-5" />
-            <span>Add User</span>
-          </button>
+          <div className="flex space-x-2">
+            <button
+              onClick={handleExportUsers}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-all"
+            >
+              <Download className="h-5 w-5" />
+              <span>Export</span>
+            </button>
+            <button
+              onClick={() => {
+                console.log('[ADD_USER] Opening add user modal');
+                setShowAddModal(true);
+              }}
+              className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-all"
+            >
+              <UserPlus className="h-5 w-5" />
+              <span>Add User</span>
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
@@ -309,11 +422,7 @@ function UsersManagement() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
                         <button
-                          onClick={() => {
-                            console.log('[EDIT_USER] Editing user:', user.id);
-                            setEditingUser(user);
-                            showNotification('success', 'Edit user feature coming soon!');
-                          }}
+                          onClick={() => handleEditUser(user)}
                           className="text-secondary hover:text-secondary/80 transition-colors"
                         >
                           <Edit className="h-4 w-4" />
@@ -339,45 +448,135 @@ function UsersManagement() {
         onClose={() => setShowAddModal(false)}
         onUserAdded={handleUserAdded}
       />
+      
+      <EditUserModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditingUser(null);
+        }}
+        onUserUpdated={handleUserUpdated}
+        user={editingUser}
+      />
     </>
   );
 }
 
 function ProgramsManagement() {
-  const [programs, setPrograms] = useState(getPrograms());
+  const [programs, setPrograms] = useState<any[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingProgram, setEditingProgram] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
   const { showNotification } = useNotification();
+
+  const fetchPrograms = async () => {
+    try {
+      setLoading(true);
+      const result = await getPrograms();
+      if (result.success) {
+        setPrograms(result.data);
+      } else {
+        throw new Error(result.error || 'Failed to fetch programs');
+      }
+    } catch (error) {
+      console.error('[PROGRAMS_MANAGEMENT] Error fetching programs:', error);
+      showNotification('error', 'Failed to load programs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchPrograms();
+  }, []);
 
   const handleDeleteProgram = (id: string) => {
     if (window.confirm('Are you sure you want to delete this program?')) {
       try {
         console.log('[DELETE_PROGRAM] Deleting program:', id);
-        deleteProgram(id);
-        setPrograms(getPrograms());
-        showNotification('success', 'Program deleted successfully!');
+        const result = await deleteProgram(id);
+        if (result.success) {
+          await fetchPrograms();
+          showNotification('success', 'Program deleted successfully!');
+        } else {
+          throw new Error(result.error || 'Failed to delete program');
+        }
       } catch (error) {
         console.error('[DELETE_PROGRAM] Error:', error);
-        showNotification('error', 'Failed to delete program. Please try again.');
+        const errorMessage = error instanceof Error ? error.message : 'Failed to delete program';
+        showNotification('error', errorMessage);
       }
     }
   };
 
   const handleProgramAdded = () => {
-    setPrograms(getPrograms());
+    fetchPrograms();
   };
+
+  const handleProgramUpdated = () => {
+    fetchPrograms();
+  };
+
+  const handleEditProgram = (program: any) => {
+    console.log('[EDIT_PROGRAM] Opening edit modal for program:', program.id);
+    setEditingProgram(program);
+    setShowEditModal(true);
+  };
+
+  const handleExportPrograms = async () => {
+    try {
+      console.log('[EXPORT_PROGRAMS] Starting export...');
+      const result = await exportProgramsReport();
+      if (result.success) {
+        // Create downloadable file
+        const dataStr = JSON.stringify(result.data, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `programs-report-${new Date().toISOString().split('T')[0]}.json`;
+        link.click();
+        showNotification('success', 'Programs report exported successfully!');
+      } else {
+        throw new Error(result.error || 'Failed to export programs');
+      }
+    } catch (error) {
+      console.error('[EXPORT_PROGRAMS] Error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to export programs';
+      showNotification('error', errorMessage);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner size="lg" text="Loading programs..." />
+      </div>
+    );
+  }
 
   return (
     <>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-text">Programs Management</h1>
-          <button 
-            onClick={() => setShowAddModal(true)}
-            className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-all"
-          >
-            <PlusCircle className="h-5 w-5" />
-            <span>Add Program</span>
-          </button>
+          <div className="flex space-x-2">
+            <button
+              onClick={handleExportPrograms}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-all"
+            >
+              <Download className="h-5 w-5" />
+              <span>Export</span>
+            </button>
+            <button 
+              onClick={() => setShowAddModal(true)}
+              className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-all"
+            >
+              <PlusCircle className="h-5 w-5" />
+              <span>Add Program</span>
+            </button>
+          </div>
         </div>
 
         <div className="grid gap-6">
@@ -387,10 +586,7 @@ function ProgramsManagement() {
                 <h3 className="text-xl font-bold text-text">{program.title}</h3>
                 <div className="flex space-x-2">
                   <button 
-                    onClick={() => {
-                      console.log('[EDIT_PROGRAM] Editing program:', program.id);
-                      showNotification('success', 'Edit Program feature coming soon!');
-                    }}
+                    onClick={() => handleEditProgram(program)}
                     className="text-secondary hover:text-secondary/80 transition-colors"
                   >
                     <Edit className="h-5 w-5" />
@@ -438,14 +634,73 @@ function ProgramsManagement() {
         onClose={() => setShowAddModal(false)}
         onProgramAdded={handleProgramAdded}
       />
+      
+      <EditProgramModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditingProgram(null);
+        }}
+        onProgramUpdated={handleProgramUpdated}
+        program={editingProgram}
+      />
     </>
   );
 }
 
 function AttendanceOverview() {
-  const attendance = getAttendance();
-  const sessions = getSessions();
-  const users = getUsers();
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { showNotification } = useNotification();
+
+  React.useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [attendanceResult, sessionsResult, usersResult] = await Promise.all([
+          getAttendance(),
+          getSessions(),
+          getUsers()
+        ]);
+
+        if (attendanceResult.success) setAttendance(attendanceResult.data);
+        if (sessionsResult.success) setSessions(sessionsResult.data);
+        if (usersResult.success) setUsers(usersResult.data);
+      } catch (error) {
+        console.error('[ATTENDANCE_OVERVIEW] Error fetching data:', error);
+        showNotification('error', 'Failed to load attendance data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [showNotification]);
+
+  const handleExportAttendance = async () => {
+    try {
+      console.log('[EXPORT_ATTENDANCE] Starting export...');
+      const result = await exportAttendanceReport();
+      if (result.success) {
+        // Create downloadable file
+        const dataStr = JSON.stringify(result.data, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `attendance-report-${new Date().toISOString().split('T')[0]}.json`;
+        link.click();
+        showNotification('success', 'Attendance report exported successfully!');
+      } else {
+        throw new Error(result.error || 'Failed to export attendance');
+      }
+    } catch (error) {
+      console.error('[EXPORT_ATTENDANCE] Error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to export attendance';
+      showNotification('error', errorMessage);
+    }
+  };
 
   const attendanceWithDetails = attendance.map(record => {
     const session = sessions.find(s => s.id === record.session_id);
@@ -457,11 +712,22 @@ function AttendanceOverview() {
     };
   });
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <LoadingSpinner size="lg" text="Loading attendance..." />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-text">Attendance Overview</h1>
-        <button className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2">
+        <button 
+          onClick={handleExportAttendance}
+          className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+        >
           <Download className="h-5 w-5" />
           <span>Export Report</span>
         </button>
@@ -513,27 +779,27 @@ function SystemSettings() {
   const { showNotification } = useNotification();
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [apiEndpoint, setApiEndpoint] = useState('https://script.google.com/macros/s/AKfycbx_jYcPeua9Gf7oo5qRgo1iFFxSfAv_6x2ld-21WFLksbMVhWKyHGZirp9bskHQPU4Oow/exec');
+  const [apiEndpoint, setApiEndpoint] = useState(import.meta.env.VITE_GOOGLE_SHEETS_API_URL || '');
 
   const handleTestConnection = async () => {
     setIsTestingConnection(true);
     console.log('[TEST_CONNECTION] Testing Google Sheets connection to:', apiEndpoint);
     
     try {
-      const result = await testGoogleSheetsConnection(apiEndpoint);
+      const result = await testGoogleSheetsConnection();
       
       setTestResult(result);
       
       if (result.success) {
-        showNotification('success', result.message || 'Google Sheets connection successful!');
+        showNotification('success', 'Google Sheets connection successful!');
       } else {
-        showNotification('error', result.error || 'Connection failed');
+        showNotification('error', result.error || 'Google Sheets connection failed');
       }
     } catch (error) {
       console.error('[TEST_CONNECTION] Connection failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       setTestResult({ success: false, message: errorMessage });
-      showNotification('error', `Connection failed: ${errorMessage}`);
+      showNotification('error', `Google Sheets connection failed: ${errorMessage}`);
     } finally {
       setIsTestingConnection(false);
     }
@@ -576,12 +842,13 @@ function SystemSettings() {
                 value={apiEndpoint}
                 onChange={(e) => setApiEndpoint(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
-                placeholder="Enter Google Apps Script URL"
+                placeholder="Google Apps Script URL"
+                readOnly
               />
             </div>
             <button 
               onClick={handleTestConnection}
-              disabled={isTestingConnection || !apiEndpoint.trim()}
+              disabled={isTestingConnection}
               className="bg-secondary hover:bg-secondary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-all flex items-center space-x-2"
             >
               {isTestingConnection ? (

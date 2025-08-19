@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, BookOpen, Calendar, Users, FileText } from 'lucide-react';
-import { createProgram } from '../utils/googleSheetsApi';
+import { updateProgram } from '../utils/googleSheetsApi';
 import { useNotification } from '../hooks/useNotification';
 import LoadingSpinner from './LoadingSpinner';
 
-interface AddProgramModalProps {
+interface EditProgramModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onProgramAdded: () => void;
+  onProgramUpdated: () => void;
+  program: any;
 }
 
-export default function AddProgramModal({ isOpen, onClose, onProgramAdded }: AddProgramModalProps) {
+export default function EditProgramModal({ isOpen, onClose, onProgramUpdated, program }: EditProgramModalProps) {
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -18,13 +19,28 @@ export default function AddProgramModal({ isOpen, onClose, onProgramAdded }: Add
     start_date: '',
     end_date: '',
     max_participants: 20,
-    trainer_id: ''
+    status: 'upcoming' as 'upcoming' | 'ongoing' | 'completed'
   });
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { showNotification } = useNotification();
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (program && isOpen) {
+      setFormData({
+        title: program.title || '',
+        description: program.description || '',
+        department: program.department || 'smart-creative',
+        start_date: program.start_date || '',
+        end_date: program.end_date || '',
+        max_participants: program.max_participants || 20,
+        status: program.status || 'upcoming'
+      });
+      setErrors({});
+    }
+  }, [program, isOpen]);
+
+  if (!isOpen || !program) return null;
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -63,51 +79,29 @@ export default function AddProgramModal({ isOpen, onClose, onProgramAdded }: Add
     setIsLoading(true);
 
     try {
-      console.log('[ADD_PROGRAM] Starting program creation:', formData);
+      console.log('[EDIT_PROGRAM] Updating program:', program.id, formData);
       
-      const programData = {
-        title: formData.title,
-        description: formData.description,
-        department: formData.department,
-        start_date: formData.start_date,
-        end_date: formData.end_date,
-        max_participants: formData.max_participants,
-        current_participants: 0,
-        status: 'upcoming',
-        created_at: new Date().toISOString()
-      };
+      const result = await updateProgram(program.id, {
+        ...formData,
+        updated_at: new Date().toISOString()
+      });
 
-      const result = await createProgram(programData);
-      
       if (result.success) {
-        console.log('[ADD_PROGRAM] Program created successfully');
-        showNotification('success', `Program "${formData.title}" added successfully!`);
-        onProgramAdded();
+        console.log('[EDIT_PROGRAM] Program updated successfully');
+        showNotification('success', `Program "${formData.title}" updated successfully!`);
+        onProgramUpdated();
         onClose();
-        
-        // Reset form
-        setFormData({
-          title: '',
-          description: '',
-          department: 'smart-creative',
-          start_date: '',
-          end_date: '',
-          max_participants: 20,
-          trainer_id: ''
-        });
-        setErrors({});
       } else {
-        throw new Error(result.error || 'Failed to create program');
+        throw new Error(result.error || 'Failed to update program');
       }
     } catch (error) {
-      console.error('[ADD_PROGRAM] Error creating program:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to add program';
+      console.error('[EDIT_PROGRAM] Error updating program:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update program';
       showNotification('error', errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
-      
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -126,7 +120,7 @@ export default function AddProgramModal({ isOpen, onClose, onProgramAdded }: Add
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-text">Add New Program</h2>
+          <h2 className="text-xl font-bold text-text">Edit Program</h2>
           <button
             onClick={onClose}
             disabled={isLoading}
@@ -242,28 +236,47 @@ export default function AddProgramModal({ isOpen, onClose, onProgramAdded }: Add
             </div>
           </div>
 
-          {/* Max Participants */}
-          <div>
-            <label className="block text-sm font-medium text-text mb-2">
-              Maximum Participants *
-            </label>
-            <div className="relative">
-              <Users className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-              <input
-                type="number"
-                name="max_participants"
-                value={formData.max_participants}
-                onChange={handleInputChange}
-                min="1"
-                max="100"
-                className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent ${
-                  errors.max_participants ? 'border-red-500' : 'border-gray-300'
-                }`}
-                placeholder="Enter maximum participants"
-                disabled={isLoading}
-              />
+          {/* Max Participants and Status */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-text mb-2">
+                Maximum Participants *
+              </label>
+              <div className="relative">
+                <Users className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+                <input
+                  type="number"
+                  name="max_participants"
+                  value={formData.max_participants}
+                  onChange={handleInputChange}
+                  min="1"
+                  max="100"
+                  className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent ${
+                    errors.max_participants ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  placeholder="Enter maximum participants"
+                  disabled={isLoading}
+                />
+              </div>
+              {errors.max_participants && <p className="text-red-500 text-sm mt-1">{errors.max_participants}</p>}
             </div>
-            {errors.max_participants && <p className="text-red-500 text-sm mt-1">{errors.max_participants}</p>}
+
+            <div>
+              <label className="block text-sm font-medium text-text mb-2">
+                Status *
+              </label>
+              <select
+                name="status"
+                value={formData.status}
+                onChange={handleInputChange}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent appearance-none bg-white"
+                disabled={isLoading}
+              >
+                <option value="upcoming">Upcoming</option>
+                <option value="ongoing">Ongoing</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
           </div>
 
           <div className="flex space-x-4 pt-4">
@@ -280,7 +293,7 @@ export default function AddProgramModal({ isOpen, onClose, onProgramAdded }: Add
               disabled={isLoading}
               className="flex-1 bg-secondary hover:bg-secondary/90 disabled:opacity-50 text-white py-3 rounded-lg font-medium transition-all flex items-center justify-center"
             >
-              {isLoading ? <LoadingSpinner size="sm" text="Adding..." /> : 'Add Program'}
+              {isLoading ? <LoadingSpinner size="sm" text="Updating..." /> : 'Update Program'}
             </button>
           </div>
         </form>
