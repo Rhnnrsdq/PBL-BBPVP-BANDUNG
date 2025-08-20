@@ -289,7 +289,7 @@ function UsersManagement() {
     fetchUsers();
   }, []);
 
-  const handleDeleteUser = (id: string) => {
+  const handleDeleteUser = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this user?')) {
       try {
         console.log('[DELETE_USER] Deleting user:', id);
@@ -491,7 +491,7 @@ function ProgramsManagement() {
     fetchPrograms();
   }, []);
 
-  const handleDeleteProgram = (id: string) => {
+  const handleDeleteProgram = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this program?')) {
       try {
         console.log('[DELETE_PROGRAM] Deleting program:', id);

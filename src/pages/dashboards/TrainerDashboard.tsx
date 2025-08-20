@@ -306,7 +306,7 @@ function SessionsManagement() {
     fetchSessions();
   };
 
-  const handleDeleteSession = (id: string) => {
+  const handleDeleteSession = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this session?')) {
       try {
         console.log('[DELETE_SESSION] Deleting session:', id);
@@ -481,7 +481,7 @@ function AssignmentsManagement() {
     fetchAssignments();
   };
 
-  const handleDeleteAssignment = (id: string) => {
+  const handleDeleteAssignment = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this assignment?')) {
       try {
         console.log('[DELETE_ASSIGNMENT] Deleting assignment:', id);

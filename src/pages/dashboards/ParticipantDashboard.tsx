@@ -381,7 +381,7 @@ function MyTrainings() {
     !enrollments.some(e => e.training_id === p.id) && p.status !== 'completed'
   );
 
-  const handleEnroll = (programId: string) => {
+  const handleEnroll = async (programId: string) => {
     if (user) {
       try {
         console.log('[ENROLL_PROGRAM] Enrolling user in program:', programId);
