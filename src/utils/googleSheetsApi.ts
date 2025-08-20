@@ -328,4 +328,4 @@ export async function saveAttendanceRecord(attendanceData: any): Promise<boolean
 export async function saveAssignmentSubmission(submissionData: any): Promise<boolean> {
   const result = await createAssignmentSubmission(submissionData);
   return result.success;
-}
+}z
