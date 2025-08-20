@@ -1,5 +1,5 @@
 // Google Sheets API integration with full CRUD operations
-const GOOGLE_SHEETS_API_URL = import.meta.env.VITE_GOOGLE_SHEETS_API_URL || "https://script.google.com/macros/s/AKfycbzM9vH7mCSzpG-I7KQfWEXcGib1AB7dL1vwy-Ajl5pQ--_lT0AmFpjKEZOu1U3zsde7SA/exec";
+const GOOGLE_SHEETS_API_URL = import.meta.env.VITE_GOOGLE_SHEETS_API_URL || "https://script.google.com/macros/s/AKfycbxQfhI5Cy9EcX9mnT8j3cSZUT99h4PA0oYRwm-Tg6ucLHZijEyc9gb4PSxxwwqacgRA3g/exec";
 
 export interface GoogleSheetsResponse {
   success: boolean;
