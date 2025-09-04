@@ -1,8 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '../types';
-import { getUsers } from '../data/mockData';
+import { fetchUsers, createUser } from '../utils/googleSheetsApi';
 import { setStorageItem, getStorageItem } from '../utils/storage';
-import { saveUserRegistration } from '../utils/googleSheetsApi';
 
 interface AuthContextType {
   user: User | null;
@@ -28,8 +27,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      const users = getUsers();
-      const foundUser = users.find(u => u.email === email && u.password_hash === password);
+      const result = await fetchUsers();
+      if (!result.success) {
+        console.error('Failed to fetch users:', result.error);
+        return false;
+      }
+      
+      const users = result.data || [];
+      const foundUser = users.find((u: any) => u.email === email && u.password_hash === password);
       
       if (foundUser) {
         setUser(foundUser);
@@ -46,8 +51,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (userData: Omit<User, 'id' | 'created_at'>): Promise<boolean> => {
     try {
-      const users = getUsers();
-      const existingUser = users.find(u => u.email === userData.email);
+      const result = await fetchUsers();
+      if (!result.success) {
+        console.error('Failed to fetch users:', result.error);
+        return false;
+      }
+      
+      const users = result.data || [];
+      const existingUser = users.find((u: any) => u.email === userData.email);
       
       if (existingUser) {
         return false; // User already exists
@@ -59,17 +70,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         created_at: new Date().toISOString()
       };
 
-      const updatedUsers = [...users, newUser];
-      setStorageItem('users', updatedUsers);
-      
       // Save to Google Sheets
-      await saveUserRegistration({
-        name: newUser.name,
-        email: newUser.email,
-        role: newUser.role,
-        password: userData.password_hash,
-        timestamp: newUser.created_at
-      });
+      const createResult = await createUser(newUser);
+      if (!createResult.success) {
+        console.error('Failed to create user:', createResult.error);
+        return false;
+      }
       
       setUser(newUser);
       setIsAuthenticated(true);
