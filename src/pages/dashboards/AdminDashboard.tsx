@@ -1,7 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import DashboardLayout from '../../components/DashboardLayout';
-import GoogleSheetsSync from '../../components/GoogleSheetsSync';
+import AddUserModal from '../../components/AddUserModal';
+import EditUserModal from '../../components/EditUserModal';
+import AddProgramModal from '../../components/AddProgramModal';
+import EditProgramModal from '../../components/EditProgramModal';
+import Notification from '../../components/Notification';
+import { useNotification } from '../../hooks/useNotification';
 import { 
   Users, 
   BookOpen, 
@@ -13,27 +18,66 @@ import {
   Activity,
   Edit,
   Trash2,
-  Download
+  Download,
+  RefreshCw,
+  Database,
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
 import { 
-  getUsers, 
-  getPrograms, 
-  getSessions, 
-  getAttendance,
-  getAssignments,
+  fetchUsers,
+  fetchPrograms,
+  fetchSessions,
+  fetchAttendance,
+  createUser,
+  updateUser,
   deleteUser,
+  createProgram,
+  updateProgram,
   deleteProgram,
-  deleteSession,
-  addProgram,
-  addSession,
-  addUser
-} from '../../data/mockData';
+  exportUsers,
+  exportPrograms,
+  exportAttendance,
+  testConnection
+} from '../../utils/googleSheetsApi';
 
 function AdminOverview() {
-  const users = getUsers();
-  const programs = getPrograms();
-  const sessions = getSessions();
-  const attendance = getAttendance();
+  const [users, setUsers] = useState<any[]>([]);
+  const [programs, setPrograms] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { notifications, showNotification, removeNotification } = useNotification();
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [usersRes, programsRes, sessionsRes, attendanceRes] = await Promise.all([
+        fetchUsers(),
+        fetchPrograms(),
+        fetchSessions(),
+        fetchAttendance()
+      ]);
+
+      if (usersRes.success) setUsers(usersRes.data || []);
+      if (programsRes.success) setPrograms(programsRes.data || []);
+      if (sessionsRes.success) setSessions(sessionsRes.data || []);
+      if (attendanceRes.success) setAttendance(attendanceRes.data || []);
+    } catch (error) {
+      showNotification('error', 'Failed to fetch data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const todaysSessions = sessions.filter(s => s.date === new Date().toISOString().split('T')[0]);
+  const attendanceRate = attendance.length > 0 
+    ? Math.round((attendance.filter(a => a.status === 'present').length / attendance.length) * 100)
+    : 0;
 
   const stats = [
     {
@@ -52,14 +96,14 @@ function AdminOverview() {
     },
     {
       title: 'Sessions Today',
-      value: sessions.filter(s => s.date === new Date().toISOString().split('T')[0]).length,
+      value: todaysSessions.length,
       icon: Calendar,
       color: 'bg-orange-500',
       change: '+3'
     },
     {
       title: 'Attendance Rate',
-      value: '87%',
+      value: `${attendanceRate}%`,
       icon: BarChart3,
       color: 'bg-purple-500',
       change: '+5%'
@@ -69,12 +113,57 @@ function AdminOverview() {
   const recentUsers = users.slice(-5);
   const upcomingPrograms = programs.filter(p => p.status === 'upcoming').slice(0, 3);
 
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="animate-pulse">
+            <div className="h-6 bg-gray-200 rounded w-1/3 mb-2"></div>
+            <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="bg-white rounded-xl shadow-lg p-6">
+              <div className="animate-pulse">
+                <div className="h-12 w-12 bg-gray-200 rounded-lg mb-4"></div>
+                <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+                <div className="h-6 bg-gray-200 rounded w-1/3"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {/* Notifications */}
+      {notifications.map(notification => (
+        <Notification
+          key={notification.id}
+          type={notification.type}
+          message={notification.message}
+          onClose={() => removeNotification(notification.id)}
+        />
+      ))}
+
       {/* Welcome Header */}
       <div className="bg-white rounded-xl shadow-lg p-6">
-        <h1 className="text-2xl font-bold text-text mb-2">Admin Dashboard</h1>
-        <p className="text-text/70">Manage users, programs, and monitor training activities</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-text mb-2">Admin Dashboard</h1>
+            <p className="text-text/70">Manage users, programs, and monitor training activities</p>
+          </div>
+          <button
+            onClick={fetchData}
+            className="flex items-center space-x-2 bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg"
+          >
+            <RefreshCw className="h-5 w-5" />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -108,17 +197,14 @@ function AdminOverview() {
         <div className="bg-white rounded-xl shadow-lg p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-text">Recent Users</h3>
-            <button className="flex items-center space-x-2 text-secondary hover:text-secondary/80 transition-colors">
-              <UserPlus className="h-5 w-5" />
-              <span>Add User</span>
-            </button>
+            <span className="text-text/60 text-sm">{users.length} total users</span>
           </div>
           <div className="space-y-4">
             {recentUsers.map((user) => (
               <div key={user.id} className="flex items-center space-x-4 p-3 bg-gray-50 rounded-lg">
                 <div className="w-10 h-10 bg-secondary rounded-full flex items-center justify-center">
                   <span className="text-white font-semibold text-sm">
-                    {user.name.charAt(0).toUpperCase()}
+                    {user.name?.charAt(0)?.toUpperCase() || 'U'}
                   </span>
                 </div>
                 <div className="flex-1">
@@ -141,10 +227,7 @@ function AdminOverview() {
         <div className="bg-white rounded-xl shadow-lg p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-text">Upcoming Programs</h3>
-            <button className="flex items-center space-x-2 text-secondary hover:text-secondary/80 transition-colors">
-              <PlusCircle className="h-5 w-5" />
-              <span>Add Program</span>
-            </button>
+            <span className="text-text/60 text-sm">{programs.length} total programs</span>
           </div>
           <div className="space-y-4">
             {upcomingPrograms.map((program) => (
@@ -152,12 +235,12 @@ function AdminOverview() {
                 <h4 className="font-medium text-text mb-2">{program.title}</h4>
                 <div className="flex items-center justify-between text-sm text-text/60">
                   <span>Start: {new Date(program.start_date).toLocaleDateString()}</span>
-                  <span>{program.current_participants}/{program.max_participants} enrolled</span>
+                  <span>{program.current_participants || 0}/{program.max_participants} enrolled</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
                   <div 
                     className="bg-accent h-2 rounded-full"
-                    style={{ width: `${(program.current_participants / program.max_participants) * 100}%` }}
+                    style={{ width: `${((program.current_participants || 0) / program.max_participants) * 100}%` }}
                   ></div>
                 </div>
               </div>
@@ -165,9 +248,6 @@ function AdminOverview() {
           </div>
         </div>
       </div>
-
-      {/* Google Sheets Integration */}
-      <GoogleSheetsSync />
 
       {/* Activity Feed */}
       <div className="bg-white rounded-xl shadow-lg p-6">
@@ -181,32 +261,10 @@ function AdminOverview() {
               <UserPlus className="h-4 w-4 text-white" />
             </div>
             <div>
-              <p className="text-text font-medium">New user registered</p>
-              <p className="text-text/60 text-sm">Jane Participant joined as participant</p>
+              <p className="text-text font-medium">System connected to Google Sheets</p>
+              <p className="text-text/60 text-sm">Real-time data synchronization active</p>
             </div>
-            <span className="text-text/60 text-sm ml-auto">2 hours ago</span>
-          </div>
-          
-          <div className="flex items-center space-x-4 p-3 bg-green-50 rounded-lg">
-            <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-              <BookOpen className="h-4 w-4 text-white" />
-            </div>
-            <div>
-              <p className="text-text font-medium">Program enrollment milestone</p>
-              <p className="text-text/60 text-sm">Digital Design Mastery reached 80% capacity</p>
-            </div>
-            <span className="text-text/60 text-sm ml-auto">5 hours ago</span>
-          </div>
-          
-          <div className="flex items-center space-x-4 p-3 bg-orange-50 rounded-lg">
-            <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center">
-              <Calendar className="h-4 w-4 text-white" />
-            </div>
-            <div>
-              <p className="text-text font-medium">Session completed</p>
-              <p className="text-text/60 text-sm">Morning session of Industry 4.0 Fundamentals</p>
-            </div>
-            <span className="text-text/60 text-sm ml-auto">1 day ago</span>
+            <span className="text-text/60 text-sm ml-auto">Now</span>
           </div>
         </div>
       </div>
@@ -215,39 +273,136 @@ function AdminOverview() {
 }
 
 function UsersManagement() {
-  const [users, setUsers] = useState(getUsers());
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
+  const { notifications, showNotification, removeNotification } = useNotification();
 
-  const handleDeleteUser = (id: string) => {
-    if (confirm('Are you sure you want to delete this user?')) {
-      deleteUser(id);
-      setUsers(getUsers());
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const result = await fetchUsers();
+      if (result.success) {
+        setUsers(result.data || []);
+      } else {
+        showNotification('error', result.error || 'Failed to fetch users');
+      }
+    } catch (error) {
+      showNotification('error', 'Failed to fetch users');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleAddUser = (userData: any) => {
-    const newUser = {
-      ...userData,
-      id: Date.now().toString(),
-      created_at: new Date().toISOString()
-    };
-    addUser(newUser);
-    setUsers(getUsers());
-    setShowAddForm(false);
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleAddUser = async (userData: any) => {
+    try {
+      const result = await createUser(userData);
+      if (result.success) {
+        await fetchData();
+        showNotification('success', 'User added successfully!');
+      } else {
+        showNotification('error', result.error || 'Failed to add user');
+      }
+    } catch (error) {
+      showNotification('error', 'Failed to add user');
+    }
   };
+
+  const handleEditUser = async (id: string, userData: any) => {
+    try {
+      const result = await updateUser(id, userData);
+      if (result.success) {
+        await fetchData();
+        showNotification('success', 'User updated successfully!');
+      } else {
+        showNotification('error', result.error || 'Failed to update user');
+      }
+    } catch (error) {
+      showNotification('error', 'Failed to update user');
+    }
+  };
+
+  const handleDeleteUser = async (id: string) => {
+    if (confirm('Are you sure you want to delete this user?')) {
+      try {
+        const result = await deleteUser(id);
+        if (result.success) {
+          await fetchData();
+          showNotification('success', 'User deleted successfully!');
+        } else {
+          showNotification('error', result.error || 'Failed to delete user');
+        }
+      } catch (error) {
+        showNotification('error', 'Failed to delete user');
+      }
+    }
+  };
+
+  const handleExportUsers = async () => {
+    try {
+      const result = await exportUsers();
+      if (result.success) {
+        showNotification('success', 'Users exported successfully!');
+      } else {
+        showNotification('error', result.error || 'Failed to export users');
+      }
+    } catch (error) {
+      showNotification('error', 'Failed to export users');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="animate-pulse">
+            <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
+            <div className="space-y-3">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-16 bg-gray-200 rounded"></div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
+      {/* Notifications */}
+      {notifications.map(notification => (
+        <Notification
+          key={notification.id}
+          type={notification.type}
+          message={notification.message}
+          onClose={() => removeNotification(notification.id)}
+        />
+      ))}
+
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-text">Users Management</h1>
-        <button
-          onClick={() => setShowAddForm(true)}
-          className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
-        >
-          <UserPlus className="h-5 w-5" />
-          <span>Add User</span>
-        </button>
+        <div className="flex space-x-3">
+          <button
+            onClick={handleExportUsers}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+          >
+            <Download className="h-5 w-5" />
+            <span>Export</span>
+          </button>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+          >
+            <UserPlus className="h-5 w-5" />
+            <span>Add User</span>
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-lg overflow-hidden">
@@ -268,7 +423,7 @@ function UsersManagement() {
                     <div className="flex items-center">
                       <div className="w-10 h-10 bg-secondary rounded-full flex items-center justify-center">
                         <span className="text-white font-semibold text-sm">
-                          {user.name.charAt(0).toUpperCase()}
+                          {user.name?.charAt(0)?.toUpperCase() || 'U'}
                         </span>
                       </div>
                       <div className="ml-4">
@@ -287,7 +442,7 @@ function UsersManagement() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-text/60">
-                    {new Date(user.created_at).toLocaleDateString()}
+                    {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
@@ -311,21 +466,152 @@ function UsersManagement() {
           </table>
         </div>
       </div>
+
+      {/* Modals */}
+      <AddUserModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSubmit={handleAddUser}
+      />
+
+      <EditUserModal
+        isOpen={!!editingUser}
+        onClose={() => setEditingUser(null)}
+        onSubmit={handleEditUser}
+        user={editingUser}
+      />
     </div>
   );
 }
 
 function ProgramsManagement() {
-  const [programs, setPrograms] = useState(getPrograms());
+  const [programs, setPrograms] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingProgram, setEditingProgram] = useState<any>(null);
+  const { notifications, showNotification, removeNotification } = useNotification();
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const result = await fetchPrograms();
+      if (result.success) {
+        setPrograms(result.data || []);
+      } else {
+        showNotification('error', result.error || 'Failed to fetch programs');
+      }
+    } catch (error) {
+      showNotification('error', 'Failed to fetch programs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleAddProgram = async (programData: any) => {
+    try {
+      const result = await createProgram(programData);
+      if (result.success) {
+        await fetchData();
+        showNotification('success', 'Program added successfully!');
+      } else {
+        showNotification('error', result.error || 'Failed to add program');
+      }
+    } catch (error) {
+      showNotification('error', 'Failed to add program');
+    }
+  };
+
+  const handleEditProgram = async (id: string, programData: any) => {
+    try {
+      const result = await updateProgram(id, programData);
+      if (result.success) {
+        await fetchData();
+        showNotification('success', 'Program updated successfully!');
+      } else {
+        showNotification('error', result.error || 'Failed to update program');
+      }
+    } catch (error) {
+      showNotification('error', 'Failed to update program');
+    }
+  };
+
+  const handleDeleteProgram = async (id: string) => {
+    if (confirm('Are you sure you want to delete this program?')) {
+      try {
+        const result = await deleteProgram(id);
+        if (result.success) {
+          await fetchData();
+          showNotification('success', 'Program deleted successfully!');
+        } else {
+          showNotification('error', result.error || 'Failed to delete program');
+        }
+      } catch (error) {
+        showNotification('error', 'Failed to delete program');
+      }
+    }
+  };
+
+  const handleExportPrograms = async () => {
+    try {
+      const result = await exportPrograms();
+      if (result.success) {
+        showNotification('success', 'Programs exported successfully!');
+      } else {
+        showNotification('error', result.error || 'Failed to export programs');
+      }
+    } catch (error) {
+      showNotification('error', 'Failed to export programs');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="animate-pulse space-y-4">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="h-24 bg-gray-200 rounded"></div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
+      {/* Notifications */}
+      {notifications.map(notification => (
+        <Notification
+          key={notification.id}
+          type={notification.type}
+          message={notification.message}
+          onClose={() => removeNotification(notification.id)}
+        />
+      ))}
+
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-text">Programs Management</h1>
-        <button className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2">
-          <PlusCircle className="h-5 w-5" />
-          <span>Add Program</span>
-        </button>
+        <div className="flex space-x-3">
+          <button
+            onClick={handleExportPrograms}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+          >
+            <Download className="h-5 w-5" />
+            <span>Export</span>
+          </button>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+          >
+            <PlusCircle className="h-5 w-5" />
+            <span>Add Program</span>
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-6">
@@ -334,10 +620,16 @@ function ProgramsManagement() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-bold text-text">{program.title}</h3>
               <div className="flex space-x-2">
-                <button className="text-secondary hover:text-secondary/80">
+                <button
+                  onClick={() => setEditingProgram(program)}
+                  className="text-secondary hover:text-secondary/80"
+                >
                   <Edit className="h-5 w-5" />
                 </button>
-                <button className="text-red-600 hover:text-red-800">
+                <button
+                  onClick={() => handleDeleteProgram(program.id)}
+                  className="text-red-600 hover:text-red-800"
+                >
                   <Trash2 className="h-5 w-5" />
                 </button>
               </div>
@@ -354,7 +646,7 @@ function ProgramsManagement() {
               </div>
               <div>
                 <span className="text-text/60">Participants:</span>
-                <p className="font-medium">{program.current_participants}/{program.max_participants}</p>
+                <p className="font-medium">{program.current_participants || 0}/{program.max_participants}</p>
               </div>
               <div>
                 <span className="text-text/60">Status:</span>
@@ -370,14 +662,66 @@ function ProgramsManagement() {
           </div>
         ))}
       </div>
+
+      {/* Modals */}
+      <AddProgramModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onSubmit={handleAddProgram}
+      />
+
+      <EditProgramModal
+        isOpen={!!editingProgram}
+        onClose={() => setEditingProgram(null)}
+        onSubmit={handleEditProgram}
+        program={editingProgram}
+      />
     </div>
   );
 }
 
 function AttendanceOverview() {
-  const attendance = getAttendance();
-  const sessions = getSessions();
-  const users = getUsers();
+  const [attendance, setAttendance] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { notifications, showNotification, removeNotification } = useNotification();
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [attendanceRes, sessionsRes, usersRes] = await Promise.all([
+        fetchAttendance(),
+        fetchSessions(),
+        fetchUsers()
+      ]);
+
+      if (attendanceRes.success) setAttendance(attendanceRes.data || []);
+      if (sessionsRes.success) setSessions(sessionsRes.data || []);
+      if (usersRes.success) setUsers(usersRes.data || []);
+    } catch (error) {
+      showNotification('error', 'Failed to fetch data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleExportAttendance = async () => {
+    try {
+      const result = await exportAttendance();
+      if (result.success) {
+        showNotification('success', 'Attendance exported successfully!');
+      } else {
+        showNotification('error', result.error || 'Failed to export attendance');
+      }
+    } catch (error) {
+      showNotification('error', 'Failed to export attendance');
+    }
+  };
 
   const attendanceWithDetails = attendance.map(record => {
     const session = sessions.find(s => s.id === record.session_id);
@@ -389,11 +733,41 @@ function AttendanceOverview() {
     };
   });
 
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <div className="animate-pulse">
+            <div className="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
+            <div className="space-y-3">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-12 bg-gray-200 rounded"></div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {/* Notifications */}
+      {notifications.map(notification => (
+        <Notification
+          key={notification.id}
+          type={notification.type}
+          message={notification.message}
+          onClose={() => removeNotification(notification.id)}
+        />
+      ))}
+
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-text">Attendance Overview</h1>
-        <button className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg flex items-center space-x-2">
+        <button
+          onClick={handleExportAttendance}
+          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+        >
           <Download className="h-5 w-5" />
           <span>Export Report</span>
         </button>
@@ -414,12 +788,12 @@ function AttendanceOverview() {
               {attendanceWithDetails.map((record) => (
                 <tr key={record.id}>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-text">{record.session?.title}</div>
-                    <div className="text-sm text-text/60">{record.session?.date}</div>
+                    <div className="text-sm font-medium text-text">{record.session?.title || 'Unknown Session'}</div>
+                    <div className="text-sm text-text/60">{record.session?.date || 'N/A'}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-text">{record.participant?.name}</div>
-                    <div className="text-sm text-text/60">{record.participant?.email}</div>
+                    <div className="text-sm font-medium text-text">{record.participant?.name || 'Unknown User'}</div>
+                    <div className="text-sm text-text/60">{record.participant?.email || 'N/A'}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -429,7 +803,7 @@ function AttendanceOverview() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-text/60">
-                    {new Date(record.timestamp).toLocaleString()}
+                    {record.timestamp ? new Date(record.timestamp).toLocaleString() : 'N/A'}
                   </td>
                 </tr>
               ))}
@@ -442,8 +816,44 @@ function AttendanceOverview() {
 }
 
 function SystemSettings() {
+  const [connectionStatus, setConnectionStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [connectionMessage, setConnectionMessage] = useState('');
+  const { notifications, showNotification, removeNotification } = useNotification();
+
+  const handleTestConnection = async () => {
+    setConnectionStatus('testing');
+    setConnectionMessage('');
+    
+    try {
+      const result = await testConnection();
+      if (result.success) {
+        setConnectionStatus('success');
+        setConnectionMessage('Connection successful!');
+        showNotification('success', 'Google Sheets connection is working properly');
+      } else {
+        setConnectionStatus('error');
+        setConnectionMessage(result.error || 'Connection failed');
+        showNotification('error', result.error || 'Failed to connect to Google Sheets');
+      }
+    } catch (error) {
+      setConnectionStatus('error');
+      setConnectionMessage('Connection failed');
+      showNotification('error', 'Failed to test connection');
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Notifications */}
+      {notifications.map(notification => (
+        <Notification
+          key={notification.id}
+          type={notification.type}
+          message={notification.message}
+          onClose={() => removeNotification(notification.id)}
+        />
+      ))}
+
       <h1 className="text-2xl font-bold text-text">System Settings</h1>
       
       <div className="grid gap-6">
@@ -476,13 +886,35 @@ function SystemSettings() {
               <label className="block text-sm font-medium text-text mb-2">API Endpoint</label>
               <input
                 type="url"
-                defaultValue="https://script.google.com/macros/s/AKfycbx_jYcPeua9Gf7oo5qRgo1iFFxSfAv_6x2ld-21WFLksbMVhWKyHGZirp9bskHQPU4Oow/exec"
+                defaultValue={import.meta.env.VITE_GOOGLE_SHEETS_API_URL}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary focus:border-transparent"
+                readOnly
               />
             </div>
-            <button className="bg-secondary hover:bg-secondary/90 text-white px-4 py-2 rounded-lg">
-              Test Connection
-            </button>
+            
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={handleTestConnection}
+                disabled={connectionStatus === 'testing'}
+                className="bg-secondary hover:bg-secondary/90 disabled:opacity-50 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+              >
+                <Database className={`h-5 w-5 ${connectionStatus === 'testing' ? 'animate-spin' : ''}`} />
+                <span>{connectionStatus === 'testing' ? 'Testing...' : 'Test Connection'}</span>
+              </button>
+
+              {connectionStatus !== 'idle' && connectionStatus !== 'testing' && (
+                <div className={`flex items-center space-x-2 ${
+                  connectionStatus === 'success' ? 'text-green-600' : 'text-red-600'
+                }`}>
+                  {connectionStatus === 'success' ? (
+                    <CheckCircle className="h-5 w-5" />
+                  ) : (
+                    <AlertCircle className="h-5 w-5" />
+                  )}
+                  <span className="text-sm font-medium">{connectionMessage}</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
